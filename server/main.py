@@ -1,12 +1,15 @@
 import os
 import socket
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from server.config import Config
 from server.auth import create_token, verify_token, TOKEN_EXPIRE_HOURS
 from server.models import (
     LoginRequest, LoginResponse, ShareItem, ShareRequest,
+    FileItem, FileListResponse, UploadResponse, DiskInfo,
 )
+from server.file_manager import list_files, validate_path, detect_disks, get_content_type
 
 config = Config()
 app = FastAPI(title="WiFi File Manager")
@@ -67,3 +70,56 @@ def add_share(req: ShareRequest, user=Depends(get_current_user)):
 def remove_share(share_id: str, user=Depends(get_current_user)):
     config.remove_shared_dir(share_id)
     return {"status": "ok"}
+
+
+@app.get("/api/files", response_model=FileListResponse)
+def browse_files(path: str, user=Depends(get_current_user)):
+    if not config.is_path_allowed(path):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.isdir(path):
+        raise HTTPException(status_code=404, detail="Directory not found")
+    return FileListResponse(path=path, items=list_files(path))
+
+
+@app.get("/api/files/download")
+def download_file(path: str, user=Depends(get_current_user)):
+    if not config.is_path_allowed(path):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    filename = os.path.basename(path)
+    content_type = get_content_type(filename)
+    return StreamingResponse(
+        open(path, "rb"),
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/files/upload", response_model=UploadResponse)
+async def upload_file(path: str, file: UploadFile = File(...), user=Depends(get_current_user)):
+    if not config.is_path_allowed(path):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.isdir(path):
+        raise HTTPException(status_code=404, detail="Target directory not found")
+    dest = os.path.join(path, file.filename)
+    content = await file.read()
+    with open(dest, "wb") as f:
+        f.write(content)
+    return UploadResponse(filename=file.filename, size=len(content))
+
+
+@app.get("/api/files/preview")
+def preview_file(path: str, user=Depends(get_current_user_query)):
+    if not config.is_path_allowed(path):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    filename = os.path.basename(path)
+    content_type = get_content_type(filename)
+    return StreamingResponse(open(path, "rb"), media_type=content_type)
+
+
+@app.get("/api/disks", response_model=list[DiskInfo])
+def get_disks(user=Depends(get_current_user)):
+    return [DiskInfo(**d) for d in detect_disks()]
