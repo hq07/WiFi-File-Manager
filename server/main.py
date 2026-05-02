@@ -123,3 +123,27 @@ def preview_file(path: str, user=Depends(get_current_user_query)):
 @app.get("/api/disks", response_model=list[DiskInfo])
 def get_disks(user=Depends(get_current_user)):
     return [DiskInfo(**d) for d in detect_disks()]
+
+
+def get_local_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+if __name__ == "__main__":
+    import uvicorn
+    local_ip = get_local_ip()
+    port = config.port
+    print(f"\n{'='*50}")
+    print(f"  WiFi File Manager Server")
+    print(f"  Access from phone: http://{local_ip}:{port}")
+    if not config.password_hash:
+        print(f"  First login will set your password")
+    print(f"{'='*50}\n")
+    uvicorn.run(app, host="0.0.0.0", port=port)
