@@ -76,7 +76,7 @@ class _UploadScreenState extends State<UploadScreen> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Target directory', border: OutlineInputBorder()),
-              value: _selectedSharePath,
+              initialValue: _selectedSharePath,
               items: _shares.map<DropdownMenuItem<String>>((s) {
                 return DropdownMenuItem(value: s['path'] as String, child: Text(s['name'] ?? s['path']));
               }).toList(),

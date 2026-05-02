@@ -1,0 +1,10 @@
+{
+  "port": 8000,
+  "password_hash": "$2b$12$M8oLTHNpu.slAz9Z3..jL.FKuD4wveuS6wow7BMxO9rPa56r6ELSy",
+  "shared_dirs": [
+    {
+      "id": "aad5a288",
+      "path": "/var/folders/ww/b1s32gyx5gj1vmcr30tb30540000gn/T/tmp6fyfpo5o"
+    }
+  ]
+}
