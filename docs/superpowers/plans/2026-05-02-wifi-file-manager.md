@@ -6,7 +6,7 @@
 
 **Architecture:** FastAPI server exposes REST APIs with JWT auth. Flutter app connects over LAN, caches token, and provides full file management UI. External hard drives are auto-detected.
 
-**Tech Stack:** Python 3.10+, FastAPI, uvicorn, python-jose, passlib, bcrypt | Flutter 3.x, dio, flutter_secure_storage, video_player, photo_view, file_picker
+**Tech Stack:** Python 3.12+, uv (package manager), FastAPI, uvicorn, python-jose, passlib, bcrypt | Flutter 3.x, dio, flutter_secure_storage, video_player, photo_view, file_picker
 
 ---
 
@@ -16,7 +16,8 @@
 
 | File | Responsibility |
 |------|---------------|
-| `server/requirements.txt` | Python dependencies |
+| `pyproject.toml` | Project config and dependencies (uv) |
+| `uv.lock` | Lockfile (auto-generated) |
 | `server/config.py` | Read/write `config.json`, manage shared dirs, password hash, port |
 | `server/auth.py` | Password hashing (bcrypt), JWT create/verify |
 | `server/models.py` | Pydantic request/response models |
@@ -47,36 +48,46 @@
 ### Task 1: Project Setup
 
 **Files:**
-- Create: `server/requirements.txt`
+- Create: `pyproject.toml` (via uv init)
 - Create: `server/__init__.py`
 - Create: `server/tests/__init__.py`
 
-- [ ] **Step 1: Create requirements.txt**
+- [ ] **Step 1: Initialize project with uv**
 
-```
-fastapi==0.115.0
-uvicorn==0.30.0
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.9
-pytest==8.3.0
-httpx==0.27.0
+```bash
+cd /Users/hq/python/code/WiFi-File-Manager
+uv init --name wifi-file-manager --python 3.12
 ```
 
-- [ ] **Step 2: Create init files**
+This creates `pyproject.toml`, `.python-version`, `hello.py`. Delete `hello.py` as it's not needed.
+
+- [ ] **Step 2: Add runtime dependencies**
+
+```bash
+uv add fastapi uvicorn "python-jose[cryptography]" "passlib[bcrypt]" python-multipart
+```
+
+- [ ] **Step 3: Add dev dependencies**
+
+```bash
+uv add --dev pytest httpx
+```
+
+- [ ] **Step 4: Create init files**
 
 Create empty `server/__init__.py` and `server/tests/__init__.py`.
 
-- [ ] **Step 3: Install dependencies**
-
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && pip install -r server/requirements.txt`
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Verify installation**
 
 ```bash
-git init
-git add server/requirements.txt server/__init__.py server/tests/__init__.py
-git commit -m "chore: initialize server project with dependencies"
+uv run uv run python -c "import fastapi; print('OK')"
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add pyproject.toml uv.lock .python-version server/__init__.py server/tests/__init__.py
+git commit -m "chore: initialize project with uv and dependencies"
 ```
 
 ---
@@ -143,7 +154,7 @@ def test_reject_duplicate_shared_dir():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_config.py -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_config.py -v`
 Expected: FAIL (ModuleNotFoundError)
 
 - [ ] **Step 3: Implement config.py**
@@ -225,7 +236,7 @@ class Config:
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_config.py -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_config.py -v`
 Expected: all PASS
 
 - [ ] **Step 5: Commit**
@@ -264,7 +275,7 @@ def test_invalid_token_returns_none():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_auth.py -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_auth.py -v`
 Expected: FAIL
 
 - [ ] **Step 3: Implement auth.py**
@@ -294,7 +305,7 @@ def verify_token(token: str) -> dict | None:
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_auth.py -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_auth.py -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -364,7 +375,7 @@ class DiskInfo(BaseModel):
 
 - [ ] **Step 2: Verify import works**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -c "from server.models import LoginRequest; print('OK')"`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run python -c "from server.models import LoginRequest; print('OK')"`
 Expected: OK
 
 - [ ] **Step 3: Commit**
@@ -423,7 +434,7 @@ def test_detect_disks_returns_list():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_file_manager.py -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_file_manager.py -v`
 Expected: FAIL
 
 - [ ] **Step 3: Implement file_manager.py**
@@ -520,7 +531,7 @@ def get_content_type(filename: str) -> str:
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_file_manager.py -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_file_manager.py -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -604,7 +615,7 @@ def test_shares_crud():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_main.py -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_main.py -v`
 Expected: FAIL
 
 - [ ] **Step 3: Implement main.py with auth and share routes**
@@ -687,7 +698,7 @@ def remove_share(share_id: str, user=Depends(get_current_user)):
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_main.py -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_main.py -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -790,7 +801,7 @@ def test_preview_with_query_token():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/test_main.py -v -k "file"`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/test_main.py -v -k "file"`
 Expected: FAIL (routes not defined)
 
 - [ ] **Step 3: Add file routes to main.py**
@@ -853,7 +864,7 @@ def get_disks(user=Depends(get_current_user)):
 
 - [ ] **Step 4: Run all tests**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/ -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/ -v`
 Expected: all PASS
 
 - [ ] **Step 5: Commit**
@@ -901,7 +912,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Test server starts**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && timeout 3 python -m server.main || true`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && timeout 3 uv run python -m server.main || true`
 Expected: prints the access URL banner
 
 - [ ] **Step 3: Commit**
@@ -1810,11 +1821,11 @@ git commit -m "feat: add upload screen with file picker and progress"
 
 - [ ] **Step 1: Start server locally**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m server.main`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run python -m server.main`
 
 - [ ] **Step 2: Run all server tests**
 
-Run: `cd /Users/hq/python/code/WiFi-File-Manager && python -m pytest server/tests/ -v`
+Run: `cd /Users/hq/python/code/WiFi-File-Manager && uv run pytest server/tests/ -v`
 Expected: all PASS
 
 - [ ] **Step 3: Build Flutter APK**
