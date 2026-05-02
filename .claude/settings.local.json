@@ -11,7 +11,12 @@
       "Bash(/opt/homebrew/bin/flutter --version)",
       "Bash(flutter create *)",
       "Bash(flutter pub *)",
-      "Bash(flutter analyze *)"
+      "Bash(flutter analyze *)",
+      "Bash(flutter clean *)",
+      "Bash(flutter build *)",
+      "Bash(flutter doctor *)",
+      "Bash(mkdir -p /opt/homebrew/Caskroom/android-platform-tools/36.0.0/licenses)",
+      "Bash(cp /opt/homebrew/share/android-commandlinetools/licenses/* /opt/homebrew/Caskroom/android-platform-tools/36.0.0/licenses/)"
     ]
   }
 }
