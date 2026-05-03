@@ -1,5 +1,6 @@
 // android/lib/services/api_service.dart
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
@@ -19,12 +20,18 @@ class ApiService {
 
   Future<bool> login(String username, String password) async {
     try {
+      print('LOGIN: POST $_baseUrl/api/login');
       final resp = await _dio.post('$_baseUrl/api/login',
           data: {'username': username, 'password': password});
+      print('LOGIN: status=${resp.statusCode} data=${resp.data}');
       _token = resp.data['token'];
       await _storage.write(key: 'token', value: _token);
       return true;
-    } on DioException {
+    } on DioException catch (e) {
+      print('LOGIN ERROR: ${e.type} ${e.message} ${e.response?.statusCode}');
+      return false;
+    } catch (e) {
+      print('LOGIN UNKNOWN ERROR: $e');
       return false;
     }
   }
@@ -74,14 +81,17 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> uploadFile(
-      String targetPath, String filePath,
+      String targetPath, String filePath, String relativePath,
       void Function(int, int)? onProgress) async {
+    final parts = relativePath.split('/');
+    final filename = parts.last;
+    final subdir = parts.length > 1 ? parts.sublist(0, parts.length - 1).join('/') : '';
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(filePath),
+      'file': await MultipartFile.fromFile(filePath, filename: filename),
     });
     final resp = await _dio.post('$_baseUrl/api/files/upload',
         data: formData,
-        queryParameters: {'path': targetPath},
+        queryParameters: {'path': targetPath, 'subdir': subdir},
         options: _authOptions,
         onSendProgress: onProgress);
     return resp.data;
@@ -94,6 +104,40 @@ class ApiService {
   Future<List<dynamic>> getDisks() async {
     final resp =
         await _dio.get('$_baseUrl/api/disks', options: _authOptions);
+    return resp.data;
+  }
+
+  Future<Map<String, dynamic>> getUploadsDir() async {
+    final resp =
+        await _dio.get('$_baseUrl/api/uploads-dir', options: _authOptions);
+    return resp.data;
+  }
+
+  Future<void> deleteFile(String path) async {
+    await _dio.delete('$_baseUrl/api/files/delete',
+        queryParameters: {'path': path}, options: _authOptions);
+  }
+
+  Future<void> renameFile(String path, String newName) async {
+    await _dio.post('$_baseUrl/api/files/rename',
+        queryParameters: {'path': path, 'new_name': newName},
+        options: _authOptions);
+  }
+
+  Future<void> toggleShareVisible(String id, bool visible) async {
+    await _dio.patch('$_baseUrl/api/shares/$id',
+        data: {'visible': visible}, options: _authOptions);
+  }
+
+  Future<List<dynamic>> getCommonPaths() async {
+    final resp =
+        await _dio.get('$_baseUrl/api/common-paths', options: _authOptions);
+    return resp.data;
+  }
+
+  Future<Map<String, dynamic>> browsePath(String path) async {
+    final resp = await _dio.get('$_baseUrl/api/browse',
+        queryParameters: {'path': path}, options: _authOptions);
     return resp.data;
   }
 }
