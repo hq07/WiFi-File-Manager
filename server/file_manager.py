@@ -1,7 +1,42 @@
 # server/file_manager.py
 import os
 import platform
+import subprocess
+import json
 from datetime import datetime, timezone
+
+
+IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.heic'}
+VIDEO_EXTS = {'.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv'}
+AUDIO_EXTS = {'.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma'}
+MEDIA_EXTS = IMAGE_EXTS | VIDEO_EXTS | AUDIO_EXTS
+
+
+def _get_media_metadata(path: str, ext: str) -> dict:
+    """Extract duration and/or resolution for media files. Returns {} on failure."""
+    meta = {}
+    try:
+        if ext in IMAGE_EXTS:
+            from PIL import Image
+            with Image.open(path) as img:
+                meta['resolution'] = f"{img.width}x{img.height}"
+        elif ext in VIDEO_EXTS | AUDIO_EXTS:
+            result = subprocess.run(
+                ['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                 '-show_format', '-show_streams', path],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                info = json.loads(result.stdout)
+                if 'format' in info and 'duration' in info['format']:
+                    meta['duration'] = float(info['format']['duration'])
+                for stream in info.get('streams', []):
+                    if stream.get('codec_type') == 'video' and 'width' in stream:
+                        meta['resolution'] = f"{stream['width']}x{stream['height']}"
+                        break
+    except Exception:
+        pass
+    return meta
 
 
 def list_files(directory: str) -> list[dict]:
@@ -9,12 +44,18 @@ def list_files(directory: str) -> list[dict]:
     for name in sorted(os.listdir(directory)):
         full_path = os.path.join(directory, name)
         stat = os.stat(full_path)
-        items.append({
+        item = {
             "name": name,
             "type": "folder" if os.path.isdir(full_path) else "file",
             "size": stat.st_size,
             "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-        })
+        }
+        if item["type"] == "file":
+            ext = os.path.splitext(name)[1].lower()
+            if ext in MEDIA_EXTS and stat.st_size < 500 * 1024 * 1024:
+                meta = _get_media_metadata(full_path, ext)
+                item.update(meta)
+        items.append(item)
     return items
 
 
