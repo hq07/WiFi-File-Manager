@@ -1,11 +1,13 @@
 // android/lib/screens/settings_screen.dart
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/layout_prefs.dart';
 import 'browse_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ApiService api;
-  const SettingsScreen({super.key, required this.api});
+  final LayoutPrefs layoutPrefs;
+  const SettingsScreen({super.key, required this.api, required this.layoutPrefs});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -105,32 +107,117 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadShares,
-              child: _shares.isEmpty
-                  ? const Center(child: Text('暂无共享目录'))
-                  : ListView.builder(
-                      itemCount: _shares.length,
-                      itemBuilder: (context, index) {
-                        final s = _shares[index];
-                        return ListTile(
-                          leading: const Icon(Icons.folder, color: Colors.amber),
-                          title: Text(s['name'] ?? s['path']),
-                          subtitle: Text(s['path']),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Switch(
-                                value: s['visible'] ?? true,
-                                onChanged: (v) => _toggleVisible(index, v),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deleteShare(index),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+              child: ListView(
+                children: [
+                  // 布局设置
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Text('显示布局', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Text('默认布局', style: TextStyle(fontSize: 15)),
+                        const Spacer(),
+                        SegmentedButton<LayoutMode>(
+                          segments: const [
+                            ButtonSegment(value: LayoutMode.list, label: Text('列表'), icon: Icon(Icons.view_list)),
+                            ButtonSegment(value: LayoutMode.grid, label: Text('网格'), icon: Icon(Icons.grid_view)),
+                          ],
+                          selected: {widget.layoutPrefs.layoutMode},
+                          onSelectionChanged: (v) => setState(() => widget.layoutPrefs.layoutMode = v.first),
+                        ),
+                      ],
                     ),
+                  ),
+                  SwitchListTile(
+                    title: const Text('显示缩略图'),
+                    subtitle: const Text('图片文件显示真实预览'),
+                    value: widget.layoutPrefs.showThumbnails,
+                    onChanged: (v) => setState(() => widget.layoutPrefs.showThumbnails = v),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Text('网格列数', style: TextStyle(fontSize: 15)),
+                        const Spacer(),
+                        SegmentedButton<int>(
+                          segments: const [
+                            ButtonSegment(value: 2, label: Text('2')),
+                            ButtonSegment(value: 3, label: Text('3')),
+                            ButtonSegment(value: 4, label: Text('4')),
+                          ],
+                          selected: {widget.layoutPrefs.gridColumns},
+                          onSelectionChanged: (v) => setState(() => widget.layoutPrefs.gridColumns = v.first),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text('文件信息', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  SwitchListTile(
+                    title: const Text('文件大小'),
+                    value: widget.layoutPrefs.showSize,
+                    onChanged: (v) => setState(() => widget.layoutPrefs.showSize = v),
+                  ),
+                  SwitchListTile(
+                    title: const Text('修改日期'),
+                    value: widget.layoutPrefs.showDate,
+                    onChanged: (v) => setState(() => widget.layoutPrefs.showDate = v),
+                  ),
+                  SwitchListTile(
+                    title: const Text('文件扩展名'),
+                    value: widget.layoutPrefs.showExtension,
+                    onChanged: (v) => setState(() => widget.layoutPrefs.showExtension = v),
+                  ),
+                  SwitchListTile(
+                    title: const Text('时长'),
+                    subtitle: const Text('音频/视频文件'),
+                    value: widget.layoutPrefs.showDuration,
+                    onChanged: (v) => setState(() => widget.layoutPrefs.showDuration = v),
+                  ),
+                  SwitchListTile(
+                    title: const Text('分辨率'),
+                    subtitle: const Text('图片/视频文件'),
+                    value: widget.layoutPrefs.showResolution,
+                    onChanged: (v) => setState(() => widget.layoutPrefs.showResolution = v),
+                  ),
+                  const Divider(),
+                  // 共享文件夹
+                  if (_shares.isEmpty)
+                    const Center(child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text('暂无共享目录'),
+                    ))
+                  else
+                    ...List.generate(_shares.length, (index) {
+                      final s = _shares[index];
+                      return ListTile(
+                        leading: const Icon(Icons.folder, color: Colors.amber),
+                        title: Text(s['name'] ?? s['path']),
+                        subtitle: Text(s['path']),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Switch(
+                              value: s['visible'] ?? true,
+                              onChanged: (v) => _toggleVisible(index, v),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteShare(index),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
             ),
     );
   }
