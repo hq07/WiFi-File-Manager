@@ -15,9 +15,16 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'WiFi File Manager',
       theme: ThemeData(
-        colorSchemeSeed: Colors.blue,
+        colorSchemeSeed: const Color(0xFF6C63FF),
         useMaterial3: true,
+        brightness: Brightness.light,
       ),
+      darkTheme: ThemeData(
+        colorSchemeSeed: const Color(0xFF6C63FF),
+        useMaterial3: true,
+        brightness: Brightness.dark,
+      ),
+      themeMode: ThemeMode.system,
       home: LoginScreen(api: api),
     );
   }
