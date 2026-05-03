@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/api_service.dart';
+import '../utils/format_utils.dart';
 import 'file_preview_screen.dart';
 
 class FileListScreen extends StatefulWidget {
@@ -133,7 +134,7 @@ class _FileListScreenState extends State<FileListScreen> {
                           leading: Icon(_getIcon(item['type'], item['name'])),
                           title: Text(item['name']),
                           subtitle: item['type'] == 'file'
-                              ? Text(_formatSize(item['size']))
+                              ? Text(formatSize(item['size']))
                               : null,
                           onTap: () => _onItemTap(item),
                           onLongPress: () => _onItemLongPress(item),
@@ -144,10 +145,4 @@ class _FileListScreenState extends State<FileListScreen> {
     );
   }
 
-  String _formatSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
 }
