@@ -1,6 +1,7 @@
 // android/lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/layout_prefs.dart';
 import '../utils/format_utils.dart';
 import 'file_list_screen.dart';
 import 'login_screen.dart';
@@ -9,7 +10,8 @@ import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ApiService api;
-  const HomeScreen({super.key, required this.api});
+  final LayoutPrefs layoutPrefs;
+  const HomeScreen({super.key, required this.api, required this.layoutPrefs});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -48,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => FileListScreen(api: widget.api, path: path, title: name),
+        builder: (_) => FileListScreen(api: widget.api, layoutPrefs: widget.layoutPrefs, path: path, title: name),
       ),
     );
   }
@@ -65,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => SettingsScreen(api: widget.api),
+                  builder: (_) => SettingsScreen(api: widget.api, layoutPrefs: widget.layoutPrefs),
                 ),
               );
               _loadData(); // refresh after returning from settings
@@ -79,7 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => LoginScreen(api: widget.api),
+                  builder: (_) => LoginScreen(api: widget.api, layoutPrefs: widget.layoutPrefs),
                 ),
               );
             },
