@@ -10,7 +10,7 @@ from starlette.responses import FileResponse, Response
 from server.config import Config
 from server.auth import create_token, verify_token, TOKEN_EXPIRE_HOURS
 from server.models import (
-    LoginRequest, LoginResponse, ShareItem, ShareRequest,
+    LoginRequest, LoginResponse, ShareItem, ShareRequest, PatchShareRequest,
     FileItem, FileListResponse, UploadResponse, DiskInfo,
 )
 from server.file_manager import list_files, validate_path, detect_disks, get_content_type
@@ -171,6 +171,15 @@ def add_share(req: ShareRequest, user=Depends(get_current_user)):
 def remove_share(share_id: str, user=Depends(get_current_user)):
     config.remove_shared_dir(share_id)
     return {"status": "ok"}
+
+
+@app.patch("/api/shares/{share_id}", response_model=ShareItem)
+def update_share(share_id: str, req: PatchShareRequest, user=Depends(get_current_user)):
+    if not config.set_visible(share_id, req.visible):
+        raise HTTPException(status_code=404, detail="Share not found")
+    d = next(d for d in config.shared_dirs if d["id"] == share_id)
+    return ShareItem(id=d["id"], path=d["path"], name=os.path.basename(d["path"]),
+                     visible=d.get("visible", True))
 
 
 @app.get("/api/files", response_model=FileListResponse)

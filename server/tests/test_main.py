@@ -150,3 +150,26 @@ def test_share_visible_field():
 
         resp = client.get("/api/shares", headers=headers)
         assert resp.json()[0]["visible"] is True
+
+
+def test_patch_share_visible():
+    headers = _auth_headers()
+    client = TestClient(app)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        resp = client.post("/api/shares", json={"path": tmpdir}, headers=headers)
+        share_id = resp.json()["id"]
+
+        resp = client.patch(f"/api/shares/{share_id}", json={"visible": False}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["visible"] is False
+
+        resp = client.patch(f"/api/shares/{share_id}", json={"visible": True}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["visible"] is True
+
+
+def test_patch_share_not_found():
+    headers = _auth_headers()
+    client = TestClient(app)
+    resp = client.patch("/api/shares/nonexistent", json={"visible": False}, headers=headers)
+    assert resp.status_code == 404
