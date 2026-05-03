@@ -7,6 +7,7 @@ import 'widgets/playlist_manager.dart';
 import 'widgets/video_player_view.dart';
 import 'widgets/audio_player_view.dart';
 import 'widgets/image_gallery_view.dart';
+import 'widgets/text_code_view.dart';
 
 enum MediaType { video, audio, image, text, unsupported }
 
@@ -165,5 +166,13 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       playlist: _playlist,
     );
   }
-  Widget _buildTextPlaceholder() => const Center(child: Text('Text Viewer — coming in Task 8'));
+  Widget _buildTextPlaceholder() {
+    final item = _playlist.currentItem;
+    return TextCodeView(
+      api: widget.api,
+      filePath: widget.filePath,
+      fileName: item['name'] ?? widget.fileName,
+      fileSize: item['size'],
+    );
+  }
 }
