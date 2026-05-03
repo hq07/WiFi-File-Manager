@@ -186,3 +186,27 @@ def test_common_paths():
     # Home dir should always exist
     home = os.path.expanduser("~")
     assert any(p["path"] == home for p in paths)
+
+
+def test_browse_dirs():
+    headers = _auth_headers()
+    client = TestClient(app)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.makedirs(os.path.join(tmpdir, "alpha"))
+        os.makedirs(os.path.join(tmpdir, "beta"))
+        with open(os.path.join(tmpdir, "file.txt"), "w") as f:
+            f.write("hi")
+        os.makedirs(os.path.join(tmpdir, ".hidden"))
+
+        resp = client.get("/api/browse", params={"path": tmpdir}, headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["path"] == tmpdir
+        assert data["dirs"] == ["alpha", "beta"]  # sorted, no files, no hidden
+
+
+def test_browse_not_found():
+    headers = _auth_headers()
+    client = TestClient(app)
+    resp = client.get("/api/browse", params={"path": "/nonexistent"}, headers=headers)
+    assert resp.status_code == 404

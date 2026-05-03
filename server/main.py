@@ -291,6 +291,20 @@ def get_common_paths(user=Depends(get_current_user)):
     return [{"name": name, "path": path} for name, path in candidates if os.path.isdir(path)]
 
 
+@app.get("/api/browse")
+def browse_dirs(path: str, user=Depends(get_current_user)):
+    if not os.path.isdir(path):
+        raise HTTPException(status_code=404, detail="Directory not found")
+    try:
+        entries = sorted(
+            e for e in os.listdir(path)
+            if os.path.isdir(os.path.join(path, e)) and not e.startswith(".")
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    return {"path": path, "dirs": entries}
+
+
 def get_local_ip() -> str:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
