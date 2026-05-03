@@ -5,6 +5,7 @@ import '../utils/format_utils.dart';
 import 'file_list_screen.dart';
 import 'login_screen.dart';
 import 'upload_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ApiService api;
@@ -17,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _shares = [];
   List<dynamic> _disks = [];
+  Map<String, dynamic>? _uploadsDir;
   bool _loading = true;
 
   @override
@@ -30,7 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final shares = await widget.api.getShares();
       final disks = await widget.api.getDisks();
-      setState(() { _shares = shares; _disks = disks; _loading = false; });
+      final uploadsDir = await widget.api.getUploadsDir();
+      setState(() { _shares = shares; _disks = disks; _uploadsDir = uploadsDir; _loading = false; });
     } catch (e) {
       setState(() { _loading = false; });
       if (mounted) {
@@ -56,6 +59,18 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('WiFi File Manager'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SettingsScreen(api: widget.api),
+                ),
+              );
+              _loadData(); // refresh after returning from settings
+            },
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -81,18 +96,38 @@ class _HomeScreenState extends State<HomeScreen> {
               onRefresh: _loadData,
               child: ListView(
                 children: [
-                  if (_shares.isNotEmpty) ...[
+                  // 上传文件夹 — 始终显示
+                  if (_uploadsDir != null) ...[
                     const Padding(
                       padding: EdgeInsets.all(16),
-                      child: Text('Shared Directories', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      child: Text('上传文件夹', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     ),
-                    ..._shares.map((s) => ListTile(
+                    ListTile(
+                      leading: const Icon(Icons.cloud_upload, color: Colors.green),
+                      title: Text(_uploadsDir!['name'] ?? '上传文件夹'),
+                      subtitle: Text(_uploadsDir!['path'] ?? ''),
+                      onTap: () => _openDir(_uploadsDir!['path'], _uploadsDir!['name'] ?? '上传文件夹'),
+                    ),
+                    const Divider(),
+                  ],
+                  ...() {
+                    final sharedOnly = _shares
+                        .where((s) => s['path'] != _uploadsDir?['path'] && s['visible'] != false)
+                        .toList();
+                    if (sharedOnly.isEmpty) return <Widget>[];
+                    return [
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('共享文件夹', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      ),
+                      ...sharedOnly.map((s) => ListTile(
                       leading: const Icon(Icons.folder, color: Colors.amber),
                       title: Text(s['name'] ?? s['path']),
                       subtitle: Text(s['path']),
                       onTap: () => _openDir(s['path'], s['name'] ?? s['path']),
                     )),
-                  ],
+                    ];
+                  }(),
                   if (_disks.isNotEmpty) ...[
                     const Padding(
                       padding: EdgeInsets.all(16),
@@ -105,10 +140,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: () => _openDir(d['path'], d['name']),
                     )),
                   ],
-                  if (_shares.isEmpty && _disks.isEmpty)
+                  if (_shares.where((s) => s['path'] != _uploadsDir?['path'] && s['visible'] != false).isEmpty && _disks.isEmpty && _uploadsDir == null)
                     const Center(child: Padding(
                       padding: EdgeInsets.all(32),
-                      child: Text('No shared directories or disks found.\nAdd shared dirs from the server.', textAlign: TextAlign.center),
+                      child: Text('没有共享文件夹或磁盘。\n请在设置中添加共享目录。', textAlign: TextAlign.center),
                     )),
                 ],
               ),
