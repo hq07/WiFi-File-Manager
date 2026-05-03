@@ -23,6 +23,10 @@ class ShareRequest(BaseModel):
     path: str
 
 
+class PatchShareRequest(BaseModel):
+    visible: bool
+
+
 class FileItem(BaseModel):
     name: str
     type: str  # "file" or "folder"
