@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/layout_prefs.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final ApiService api;
-  const LoginScreen({super.key, required this.api});
+  final LayoutPrefs layoutPrefs;
+  const LoginScreen({super.key, required this.api, required this.layoutPrefs});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -12,10 +14,11 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _ipCtrl = TextEditingController();
-  final _portCtrl = TextEditingController(text: '8000');
+  final _portCtrl = TextEditingController(text: '7777');
   final _userCtrl = TextEditingController(text: 'admin');
   final _passCtrl = TextEditingController();
   bool _loading = false;
+  bool _scanning = true;
   String? _error;
 
   @override
@@ -29,6 +32,16 @@ class _LoginScreenState extends State<LoginScreen> {
     final port = await widget.api.getSavedPort();
     if (ip != null) _ipCtrl.text = ip;
     if (port != null) _portCtrl.text = port;
+    _scanForServer();
+  }
+
+  Future<void> _scanForServer() async {
+    setState(() { _scanning = true; });
+    final foundIp = await widget.api.discoverServer();
+    if (foundIp != null && mounted) {
+      _ipCtrl.text = foundIp;
+    }
+    if (mounted) setState(() { _scanning = false; });
   }
 
   Future<void> _login() async {
@@ -39,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => HomeScreen(api: widget.api)),
+        MaterialPageRoute(builder: (_) => HomeScreen(api: widget.api, layoutPrefs: widget.layoutPrefs)),
       );
     } else {
       setState(() { _error = 'Login failed. Check IP, port, and password.'; });
@@ -56,7 +69,25 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextField(controller: _ipCtrl, decoration: const InputDecoration(labelText: 'Server IP', border: OutlineInputBorder())),
+            TextField(
+              controller: _ipCtrl,
+              decoration: InputDecoration(
+                labelText: 'Server IP',
+                border: const OutlineInputBorder(),
+                suffixIcon: _scanning
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: _scanForServer,
+                      ),
+              ),
+            ),
             const SizedBox(height: 12),
             TextField(controller: _portCtrl, decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder())),
             const SizedBox(height: 12),
