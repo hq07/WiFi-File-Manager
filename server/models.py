@@ -32,6 +32,8 @@ class FileItem(BaseModel):
     type: str  # "file" or "folder"
     size: int
     modified: str
+    duration: float | None = None    # seconds, for audio/video files
+    resolution: str | None = None    # "1920x1080", for image/video files
 
 
 class FileListResponse(BaseModel):
