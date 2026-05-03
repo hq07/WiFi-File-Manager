@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import 'widgets/sleep_timer_manager.dart';
 import 'widgets/playlist_manager.dart';
 import 'widgets/video_player_view.dart';
+import 'widgets/audio_player_view.dart';
 
 enum MediaType { video, audio, image, text, unsupported }
 
@@ -142,7 +143,17 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       isFullscreen: _isFullscreen,
     );
   }
-  Widget _buildAudioPlaceholder() => const Center(child: Text('Audio Player — coming in Task 6'));
+  Widget _buildAudioPlaceholder() {
+    final item = _playlist.currentItem;
+    return AudioPlayerView(
+      api: widget.api,
+      filePath: widget.filePath,
+      fileName: item['name'] ?? widget.fileName,
+      fileSize: item['size'],
+      playlist: _playlist,
+      sleepTimer: _sleepTimer,
+    );
+  }
   Widget _buildImagePlaceholder() => const Center(child: Text('Image Viewer — coming in Task 7'));
   Widget _buildTextPlaceholder() => const Center(child: Text('Text Viewer — coming in Task 8'));
 }
