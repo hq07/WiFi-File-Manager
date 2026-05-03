@@ -16,6 +16,7 @@ class ShareItem(BaseModel):
     id: str
     path: str
     name: str
+    visible: bool = True
 
 
 class ShareRequest(BaseModel):

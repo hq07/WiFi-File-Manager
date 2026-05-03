@@ -1,5 +1,6 @@
 import os
 import tempfile
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from server.main import app, config
 
@@ -8,6 +9,8 @@ def setup_function():
     """Reset config before each test."""
     config.password_hash = None
     config.shared_dirs = []
+    # Prevent tests from overwriting the real config.json
+    config._save = lambda: None
 
 
 def test_login_no_password_set():
@@ -134,3 +137,16 @@ def test_preview_with_query_token():
             f.write(b"\xff\xd8\xff\xe0fake jpg")
         resp = client.get("/api/files/preview", params={"path": filepath, "token": token})
         assert resp.status_code == 200
+
+
+def test_share_visible_field():
+    headers = _auth_headers()
+    client = TestClient(app)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        resp = client.post("/api/shares", json={"path": tmpdir}, headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["visible"] is True
+
+        resp = client.get("/api/shares", headers=headers)
+        assert resp.json()[0]["visible"] is True
