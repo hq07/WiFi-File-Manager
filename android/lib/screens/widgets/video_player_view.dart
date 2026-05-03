@@ -42,6 +42,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   bool _isLoading = true;
   bool _hasError = false;
   bool _showControls = true;
+  bool _locked = false;
   bool _showBrightnessOverlay = false;
   bool _showVolumeOverlay = false;
   double _currentBrightness = 0;
@@ -501,15 +502,17 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         // Gesture handler overlay (transparent, captures gestures)
         Positioned.fill(
           child: GestureHandler(
-            onSingleTap: _toggleControls,
-            onDoubleTap: _onDoubleTap,
-            onHorizontalDrag: _onHorizontalDrag,
-            onVerticalDrag: _onVerticalDrag,
-            onVerticalDragStart: _onVerticalDragStart,
-            onVerticalDragEnd: _onVerticalDragEnd,
+            onSingleTap: _locked ? null : _toggleControls,
+            onDoubleTap: _locked ? null : _onDoubleTap,
+            onHorizontalDrag: _locked ? null : _onHorizontalDrag,
+            onVerticalDrag: _locked ? null : _onVerticalDrag,
+            onVerticalDragStart: _locked ? null : _onVerticalDragStart,
+            onVerticalDragEnd: _locked ? null : _onVerticalDragEnd,
             child: const SizedBox.expand(),
           ),
         ),
+        // Lock / unlock button (always visible on right, vertically centered)
+        if (_locked || _showControls) _buildLockButton(),
         // Top bar
         if (_showControls) _buildTopBar(isDark),
         // Bottom controls
@@ -720,6 +723,46 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       ),
     );
   }
+
+  // ---- Lock button ----
+
+  Widget _buildLockButton() {
+    return Positioned(
+      right: 12,
+      top: 0,
+      bottom: 0,
+      child: Center(
+        child: GestureDetector(
+          onTap: () {
+            setState(() {
+              if (_locked) {
+                _locked = false;
+                _showControls = true;
+                _resetHideControlsTimer();
+              } else {
+                _locked = true;
+                _showControls = false;
+              }
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.black38,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              _locked ? Icons.lock : Icons.lock_open,
+              color: Colors.white70,
+              size: 20,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _resetHideControlsTimer() => _startHideControlsTimer();
 
   // ---- Side overlay (brightness / volume) ----
 
