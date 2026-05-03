@@ -173,3 +173,16 @@ def test_patch_share_not_found():
     client = TestClient(app)
     resp = client.patch("/api/shares/nonexistent", json={"visible": False}, headers=headers)
     assert resp.status_code == 404
+
+
+def test_common_paths():
+    headers = _auth_headers()
+    client = TestClient(app)
+    resp = client.get("/api/common-paths", headers=headers)
+    assert resp.status_code == 200
+    paths = resp.json()
+    assert isinstance(paths, list)
+    assert all("name" in p and "path" in p for p in paths)
+    # Home dir should always exist
+    home = os.path.expanduser("~")
+    assert any(p["path"] == home for p in paths)

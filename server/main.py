@@ -275,6 +275,22 @@ def get_uploads_dir(user=Depends(get_current_user)):
     return {"path": config.uploads_dir, "name": "上传文件夹"}
 
 
+@app.get("/api/common-paths")
+def get_common_paths(user=Depends(get_current_user)):
+    home = os.path.expanduser("~")
+    candidates = [
+        ("用户目录", home),
+        ("桌面", os.path.join(home, "Desktop")),
+        ("文稿", os.path.join(home, "Documents")),
+        ("下载", os.path.join(home, "Downloads")),
+        ("图片", os.path.join(home, "Pictures")),
+        ("影片", os.path.join(home, "Movies")),
+        ("音乐", os.path.join(home, "Music")),
+        ("外置磁盘", "/Volumes"),
+    ]
+    return [{"name": name, "path": path} for name, path in candidates if os.path.isdir(path)]
+
+
 def get_local_ip() -> str:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
