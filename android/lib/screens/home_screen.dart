@@ -1,6 +1,7 @@
 // android/lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../utils/format_utils.dart';
 import 'file_list_screen.dart';
 import 'login_screen.dart';
 import 'upload_screen.dart';
@@ -100,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ..._disks.map((d) => ListTile(
                       leading: const Icon(Icons.usb, color: Colors.blue),
                       title: Text(d['name']),
-                      subtitle: Text('${_formatSize(d['free'])} free / ${_formatSize(d['total'])}'),
+                      subtitle: Text('${formatSize(d['free'])} free / ${formatSize(d['total'])}'),
                       onTap: () => _openDir(d['path'], d['name']),
                     )),
                   ],
@@ -115,10 +116,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  String _formatSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
 }
