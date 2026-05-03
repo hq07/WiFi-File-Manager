@@ -6,13 +6,18 @@ from passlib.context import CryptContext
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+DEFAULT_UPLOADS_DIR = os.path.join(os.path.expanduser("~"), "WiFi-Manager-Uploads")
+
+
 class Config:
     def __init__(self, config_path: str = "config.json"):
         self.config_path = config_path
         self.port: int = 8000
         self.password_hash: str | None = None
         self.shared_dirs: list[dict] = []
+        self.uploads_dir: str = DEFAULT_UPLOADS_DIR
         self._load()
+        self._ensure_uploads_dir()
 
     def _load(self):
         if os.path.exists(self.config_path):
@@ -21,6 +26,10 @@ class Config:
             self.port = data.get("port", 8000)
             self.password_hash = data.get("password_hash")
             self.shared_dirs = data.get("shared_dirs", [])
+            self.uploads_dir = data.get("uploads_dir", DEFAULT_UPLOADS_DIR)
+            # Backfill visible field for old configs
+            for d in self.shared_dirs:
+                d.setdefault("visible", True)
         else:
             self._save()
 
@@ -30,7 +39,21 @@ class Config:
                 "port": self.port,
                 "password_hash": self.password_hash,
                 "shared_dirs": self.shared_dirs,
+                "uploads_dir": self.uploads_dir,
             }, f, indent=2)
+
+    def _ensure_uploads_dir(self):
+        """Create uploads directory if not exists and ensure it's in shared_dirs."""
+        os.makedirs(self.uploads_dir, exist_ok=True)
+        abs_uploads = os.path.abspath(self.uploads_dir)
+        already_shared = any(
+            os.path.abspath(d["path"]) == abs_uploads
+            for d in self.shared_dirs
+        )
+        if not already_shared:
+            share_id = str(uuid.uuid4())[:8]
+            self.shared_dirs.append({"id": share_id, "path": abs_uploads, "visible": True})
+            self._save()
 
     def set_password(self, password: str):
         self.password_hash = pwd_context.hash(password)
@@ -47,13 +70,21 @@ class Config:
             if d["path"] == path:
                 return d["id"]
         share_id = str(uuid.uuid4())[:8]
-        self.shared_dirs.append({"id": share_id, "path": path})
+        self.shared_dirs.append({"id": share_id, "path": path, "visible": True})
         self._save()
         return share_id
 
     def remove_shared_dir(self, share_id: str):
         self.shared_dirs = [d for d in self.shared_dirs if d["id"] != share_id]
         self._save()
+
+    def set_visible(self, share_id: str, visible: bool) -> bool:
+        for d in self.shared_dirs:
+            if d["id"] == share_id:
+                d["visible"] = visible
+                self._save()
+                return True
+        return False
 
     def is_path_allowed(self, path: str) -> bool:
         """Check if path is within any shared directory."""
