@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/api_service.dart';
 import '../utils/format_utils.dart';
-import 'file_preview_screen.dart';
+import 'media_player_screen.dart';
 
 class FileListScreen extends StatefulWidget {
   final ApiService api;
@@ -54,10 +54,23 @@ class _FileListScreenState extends State<FileListScreen> {
       );
     } else {
       final filePath = '$_currentPath/${item['name']}';
+      final directoryFiles = _items
+          .where((f) => f['type'] == 'file')
+          .map((f) => {
+                'name': f['name'] as String,
+                'size': f['size'] as int,
+                'path': '$_currentPath/${f['name']}',
+              })
+          .toList();
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => FilePreviewScreen(api: widget.api, path: filePath, name: item['name']),
+          builder: (_) => MediaPlayerScreen(
+            api: widget.api,
+            filePath: filePath,
+            fileName: item['name'],
+            directoryFiles: directoryFiles,
+          ),
         ),
       );
     }
