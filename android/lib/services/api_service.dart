@@ -282,7 +282,7 @@ class ApiService {
 
   Future<void> restoreTrash(String subPath) async {
     await _dio.post('$_baseUrl/api/trash/restore',
-        queryParameters: {'path': subPath}, options: _authOptions);
+        queryParameters: {'name': subPath}, options: _authOptions);
   }
 
   Future<void> emptyTrash() async {
