@@ -180,6 +180,28 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       sleepTimer: _sleepTimer,
       historyService: widget.historyService,
       initialPositionMs: widget.initialPositionMs,
+      onSwitchToVideo: _switchToVideo,
+    );
+  }
+
+  void _switchToVideo() {
+    final videoFile = widget.directoryFiles.firstWhere(
+      (f) => detectMediaType(f['name']) == MediaType.video,
+      orElse: () => {},
+    );
+    if (videoFile.isEmpty) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MediaPlayerScreen(
+          api: widget.api,
+          filePath: videoFile['path'] ?? '${widget.filePath.substring(0, widget.filePath.lastIndexOf('/'))}/${videoFile['name']}',
+          fileName: videoFile['name'],
+          directoryFiles: widget.directoryFiles,
+          historyService: widget.historyService,
+          layoutPrefs: widget.layoutPrefs,
+        ),
+      ),
     );
   }
   Widget _buildImagePlaceholder() {

@@ -18,6 +18,7 @@ class AudioPlayerView extends StatefulWidget {
   final SleepTimerManager sleepTimer;
   final HistoryService? historyService;
   final int initialPositionMs;
+  final VoidCallback? onSwitchToVideo;
 
   const AudioPlayerView({
     super.key,
@@ -29,6 +30,7 @@ class AudioPlayerView extends StatefulWidget {
     required this.sleepTimer,
     this.historyService,
     this.initialPositionMs = 0,
+    this.onSwitchToVideo,
   });
 
   @override
@@ -41,6 +43,8 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   bool _hasError = false;
   double _playbackSpeed = 1.0;
   double _currentVolume = 0.5;
+  bool _isMuted = false;
+  double _volumeBeforeMute = 0.5;
   Timer? _positionUpdateTimer;
 
   static const List<double> _speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
@@ -165,17 +169,26 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   void _togglePlayPause() {
     final ctrl = _controller;
     if (ctrl == null) return;
-    if (ctrl.value.isPlaying) {
-      ctrl.pause();
-    } else {
-      ctrl.play();
-    }
+    ctrl.value.isPlaying ? ctrl.pause() : ctrl.play();
     setState(() {});
   }
 
   void _setPlaybackSpeed(double speed) {
     _playbackSpeed = speed;
     _controller?.setPlaybackSpeed(speed);
+    setState(() {});
+  }
+
+  void _toggleMute() {
+    if (_isMuted) {
+      _currentVolume = _volumeBeforeMute;
+      _isMuted = false;
+    } else {
+      _volumeBeforeMute = _currentVolume;
+      _currentVolume = 0;
+      _isMuted = true;
+    }
+    VolumeController.instance.setVolume(_currentVolume);
     setState(() {});
   }
 
@@ -201,6 +214,8 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       format: (widget.filePath.split('.').last).toUpperCase(),
     );
   }
+
+  // ---- Bottom sheets ----
 
   void _showSpeedSheet() {
     showModalBottomSheet(
@@ -334,18 +349,20 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
           end: Alignment.bottomCenter,
           colors: isDark
               ? const [Color(0xFF1a1040), Color(0xFF0f0c29)]
-              : const [Color(0xFFf0eeff), Color(0xFFffffff)],
+              : const [Color(0xFFF0EEFF), Color(0xFFFFFFFF)],
         ),
       ),
       child: SafeArea(
         child: Column(
           children: [
             _buildTopBar(isDark),
-            Expanded(child: _buildCenterContent(isDark)),
+            const Spacer(flex: 2),
+            _buildAlbumArt(isDark),
+            const Spacer(flex: 1),
             _buildProgressSection(isDark),
             _buildMainControls(isDark),
             _buildBottomBar(isDark),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -355,151 +372,123 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   // ---- Top bar ----
 
   Widget _buildTopBar(bool isDark) {
+    final item = widget.playlist.currentItem;
+    final title = item['name'] ?? widget.fileName;
+    // Remove extension for display
+    final displayTitle = title.contains('.')
+        ? title.substring(0, title.lastIndexOf('.'))
+        : title;
+    final ext = widget.filePath.split('.').last.toUpperCase();
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(Icons.arrow_back,
-                color: isDark ? Colors.white70 : Colors.black54),
-            onPressed: () => Navigator.of(context).pop(),
+          // Back
+          GestureDetector(
+            onTap: () => Navigator.of(context).pop(),
+            child: Icon(Icons.keyboard_arrow_down,
+                color: isDark ? Colors.white70 : Colors.black54, size: 32),
           ),
+          const SizedBox(width: 12),
+          // Title + Artist
           Expanded(
-            child: Center(
-              child: Text('正在播放',
-                  style: TextStyle(
-                      color: isDark ? Colors.white70 : Colors.black54,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(displayTitle,
+                    style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(ext,
+                    style: TextStyle(
+                        color: isDark ? Colors.white38 : Colors.black38,
+                        fontSize: 13)),
+              ],
             ),
           ),
-          IconButton(
-            icon: Icon(Icons.info_outline,
-                color: isDark ? Colors.white70 : Colors.black54),
-            onPressed: _showInfoPanel,
-          ),
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert,
-                color: isDark ? Colors.white70 : Colors.black54),
-            onSelected: (v) {},
-            itemBuilder: (_) => [],
+          // Media switch
+          if (widget.onSwitchToVideo != null)
+            GestureDetector(
+              onTap: widget.onSwitchToVideo,
+              child: Icon(Icons.ondemand_video,
+                  color: isDark ? Colors.white54 : Colors.black45, size: 22),
+            ),
+          const SizedBox(width: 12),
+          // Info
+          GestureDetector(
+            onTap: _showInfoPanel,
+            child: Icon(Icons.more_horiz,
+                color: isDark ? Colors.white54 : Colors.black45, size: 22),
           ),
         ],
       ),
     );
   }
 
-  // ---- Center content (album art) ----
+  // ---- Album art ----
 
-  Widget _buildCenterContent(bool isDark) {
-    final ext = widget.filePath.split('.').last.toUpperCase();
-    final sizeStr = widget.fileSize != null ? formatSize(widget.fileSize!) : '';
-
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // Glow effect
-        Container(
-          width: 200,
-          height: 200,
+  Widget _buildAlbumArt(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: Container(
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF6C63FF).withValues(alpha: 0.4),
-                const Color(0xFF6C63FF).withValues(alpha: 0.0),
+                Color(0xFF6C63FF),
+                Color(0xFF48C6EF),
+                Color(0xFFA855F7),
               ],
             ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6C63FF).withValues(alpha: 0.3),
+                blurRadius: 40,
+                spreadRadius: 4,
+                offset: const Offset(0, 12),
+              ),
+            ],
           ),
-        ),
-        // Album art (positioned over the glow)
-        Transform.translate(
-          offset: const Offset(0, -180),
-          child: Column(
+          child: Stack(
             children: [
-              Container(
-                width: 220,
-                height: 220,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF6C63FF),
-                      Color(0xFF48c6ef),
-                      Color(0xFFa855f7),
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6C63FF).withValues(alpha: 0.35),
-                      blurRadius: 30,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    // Music note icon
-                    const Center(
-                      child: Icon(Icons.music_note,
-                          color: Colors.white, size: 72),
-                    ),
-                    // Reflection highlight on top half
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: 110,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(24)),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white.withValues(alpha: 0.15),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              Center(
+                child: Icon(Icons.music_note,
+                    color: Colors.white.withValues(alpha: 0.85), size: 80),
               ),
-              const SizedBox(height: 20),
-              // File name
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  widget.fileName,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
+              // Reflection
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 120,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(20)),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.white.withValues(alpha: 0.12),
+                        Colors.transparent,
+                      ],
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(height: 6),
-              // Format info
-              Text(
-                [ext, if (sizeStr.isNotEmpty) sizeStr].join(' · '),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.white38 : Colors.black38,
                 ),
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -517,19 +506,16 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
     final valueMs = position.inMilliseconds.toDouble().clamp(0.0, maxMs);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Column(
         children: [
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
               activeTrackColor: const Color(0xFF6C63FF),
-              inactiveTrackColor:
-                  isDark ? Colors.white12 : Colors.black12,
+              inactiveTrackColor: isDark ? Colors.white12 : Colors.black12,
               thumbColor: Colors.white,
-              thumbShape:
-                  const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape:
-                  const RoundSliderOverlayShape(overlayRadius: 14),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
               trackHeight: 3,
             ),
             child: Slider(
@@ -543,7 +529,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -563,34 +549,20 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
     );
   }
 
-  // ---- Main controls ----
+  // ---- Main controls (prev / play / next) ----
 
   Widget _buildMainControls(bool isDark) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Shuffle
-          IconButton(
-            icon: Icon(Icons.shuffle,
-                size: 22,
-                color: widget.playlist.shuffle
-                    ? const Color(0xFF6C63FF)
-                    : (isDark ? Colors.white30 : Colors.black26)),
-            onPressed: () {
-              widget.playlist.toggleShuffle();
-            },
-          ),
-          const SizedBox(width: 8),
           // Previous
-          IconButton(
-            icon: Icon(Icons.skip_previous,
-                size: 32,
-                color: widget.playlist.hasPrevious
-                    ? (isDark ? Colors.white : Colors.black87)
-                    : (isDark ? Colors.white24 : Colors.black12)),
-            onPressed: widget.playlist.hasPrevious
+          _buildCircleButton(
+            icon: Icons.skip_previous,
+            size: 36,
+            enabled: widget.playlist.hasPrevious,
+            onTap: widget.playlist.hasPrevious
                 ? () {
                     _disposeController();
                     widget.playlist.previous();
@@ -598,47 +570,45 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
                   }
                 : null,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 28),
           // Play/Pause
           GestureDetector(
             onTap: _togglePlayPause,
             child: Container(
-              width: 60,
-              height: 60,
+              width: 64,
+              height: 64,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF6C63FF), Color(0xFF8b5cf6)],
+                  colors: [Color(0xFF6C63FF), Color(0xFF8B5CF6)],
                 ),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF6C63FF).withValues(alpha: 0.4),
-                    blurRadius: 16,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 4),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
-              child: Icon(
+            child: Icon(
                 _controller?.value.isPlaying == true
-                    ? Icons.pause
-                    : Icons.play_arrow,
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
                 color: Colors.white,
-                size: 32,
+                size: 36,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 28),
           // Next
-          IconButton(
-            icon: Icon(Icons.skip_next,
-                size: 32,
-                color: widget.playlist.hasNext
-                    ? (isDark ? Colors.white : Colors.black87)
-                    : (isDark ? Colors.white24 : Colors.black12)),
-            onPressed: widget.playlist.hasNext
+          _buildCircleButton(
+            icon: Icons.skip_next,
+            size: 36,
+            enabled: widget.playlist.hasNext,
+            onTap: widget.playlist.hasNext
                 ? () {
                     _disposeController();
                     widget.playlist.next();
@@ -646,107 +616,124 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
                   }
                 : null,
           ),
-          const SizedBox(width: 8),
-          // Repeat
-          _buildRepeatButton(isDark),
         ],
       ),
     );
   }
 
-  Widget _buildRepeatButton(bool isDark) {
-    final mode = widget.playlist.repeatMode;
-    final isActive = mode != PlaylistRepeatMode.off;
-
+  Widget _buildCircleButton({
+    required IconData icon,
+    required double size,
+    required bool enabled,
+    VoidCallback? onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
-      onTap: () => widget.playlist.toggleRepeat(),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(Icons.repeat,
-              size: 22,
-              color: isActive
-                  ? const Color(0xFF6C63FF)
-                  : (isDark ? Colors.white30 : Colors.black26)),
-          if (mode == PlaylistRepeatMode.one)
-            const Text('1',
-                style: TextStyle(
-                    color: Color(0xFF6C63FF),
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold)),
-        ],
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
+        ),
+        child: Icon(icon,
+            color: enabled
+                ? (isDark ? Colors.white : Colors.black87)
+                : (isDark ? Colors.white24 : Colors.black12),
+            size: size),
       ),
     );
   }
 
-  // ---- Bottom bar ----
+  // ---- Bottom bar (play mode / timer / speed | volume) ----
 
   Widget _buildBottomBar(bool isDark) {
+    final playMode = widget.playlist.playMode;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          // Speed badge
+          // Play mode (sequential → shuffle → single repeat)
           GestureDetector(
-            onTap: _showSpeedSheet,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text('${_playbackSpeed}x',
-                  style: TextStyle(
-                      color: isDark ? Colors.white70 : Colors.black54,
-                      fontSize: 11)),
+            onTap: () => widget.playlist.cyclePlayMode(),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(
+                  playMode == PlayMode.shuffle ? Icons.shuffle : Icons.repeat,
+                  size: 20,
+                  color: playMode != PlayMode.sequential
+                      ? const Color(0xFF6C63FF)
+                      : (isDark ? Colors.white30 : Colors.black26),
+                ),
+                if (playMode == PlayMode.single)
+                  const Text('1',
+                      style: TextStyle(
+                          color: Color(0xFF6C63FF),
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold)),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 20),
           // Sleep timer
           GestureDetector(
             onTap: _showSleepTimerSheet,
             child: widget.sleepTimer.isActive
-                ? Text(
-                    widget.sleepTimer.remainingFormatted,
+                ? Text(widget.sleepTimer.remainingFormatted,
                     style: const TextStyle(
                         color: Color(0xFF6C63FF),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600),
-                  )
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600))
                 : Icon(Icons.alarm,
-                    color: isDark ? Colors.white38 : Colors.black26,
-                    size: 20),
+                    color: isDark ? Colors.white30 : Colors.black26, size: 20),
+          ),
+          const SizedBox(width: 20),
+          // Speed
+          GestureDetector(
+            onTap: _showSpeedSheet,
+            child: Text('${_playbackSpeed}x',
+                style: TextStyle(
+                    color: _playbackSpeed != 1.0
+                        ? const Color(0xFF6C63FF)
+                        : (isDark ? Colors.white38 : Colors.black38),
+                    fontSize: 12,
+                    fontWeight:
+                        _playbackSpeed != 1.0 ? FontWeight.w600 : FontWeight.normal)),
           ),
           const Spacer(),
-          // Volume icon
-          Icon(
-            _currentVolume <= 0
-                ? Icons.volume_off
-                : Icons.volume_up,
-            color: isDark ? Colors.white38 : Colors.black26,
-            size: 20,
+          // Volume
+          GestureDetector(
+            onTap: _toggleMute,
+            child: Icon(
+              _isMuted || _currentVolume <= 0
+                  ? Icons.volume_off
+                  : _currentVolume < 0.5
+                      ? Icons.volume_down
+                      : Icons.volume_up,
+              color: isDark ? Colors.white38 : Colors.black38,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 4),
-          // Volume slider
-          Expanded(
-            flex: 3,
+          SizedBox(
+            width: 100,
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 activeTrackColor: const Color(0xFF6C63FF),
-                inactiveTrackColor:
-                    isDark ? Colors.white12 : Colors.black12,
+                inactiveTrackColor: isDark ? Colors.white12 : Colors.black12,
                 thumbColor: Colors.white,
-                thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 5),
-                overlayShape:
-                    const RoundSliderOverlayShape(overlayRadius: 10),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
                 trackHeight: 2,
               ),
               child: Slider(
                 value: _currentVolume.clamp(0.0, 1.0),
                 onChanged: (v) {
                   _currentVolume = v;
+                  _isMuted = v == 0;
                   VolumeController.instance.setVolume(v);
                   setState(() {});
                 },
