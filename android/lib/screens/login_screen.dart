@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
@@ -61,7 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       await widget.api.setServer(_ipCtrl.text, _portCtrl.text);
-      final ok = await widget.api.login(_userCtrl.text, _passCtrl.text);
+      final ok = await widget.api.login(_userCtrl.text, _passCtrl.text)
+          .timeout(const Duration(seconds: 3), onTimeout: () => throw TimeoutException('login'));
       if (ok) {
         // Init services in background, don't block navigation
         widget.historyService.init(widget.prefs, api: widget.api);
@@ -85,10 +87,12 @@ class _LoginScreenState extends State<LoginScreen> {
           await widget.favoritesService.syncFromServer();
         } catch (_) {}
       } else {
-        setState(() { _error = 'Login failed. Check IP, port, and password.'; });
+        setState(() { _error = '登录失败，请检查 IP、端口和密码'; });
       }
+    } on TimeoutException {
+      setState(() { _error = '登录超时，请检查服务器是否在线'; });
     } catch (e) {
-      setState(() { _error = 'Login error: $e'; });
+      setState(() { _error = '登录失败: $e'; });
     }
     if (mounted) setState(() { _loading = false; });
   }
