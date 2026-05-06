@@ -551,7 +551,7 @@ def browse_dirs(path: str, user=Depends(get_current_user)):
             if os.path.isdir(os.path.join(path, e)) and not e.startswith(".")
         )
     except PermissionError:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        return {"path": path, "dirs": [], "message": "权限不足，无法访问此目录"}
     return {"path": path, "dirs": entries}
 
 
