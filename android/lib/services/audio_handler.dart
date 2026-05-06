@@ -121,6 +121,7 @@ class AudioPlayerService extends BaseAudioHandler with SeekHandler {
   Future<void> loadPlaylist(
     List<Map<String, dynamic>> items, {
     int startIndex = 0,
+    int initialPositionMs = 0,
     required ApiService api,
   }) async {
     final newIndex = startIndex.clamp(0, items.length - 1);
@@ -139,10 +140,10 @@ class AudioPlayerService extends BaseAudioHandler with SeekHandler {
     _playlistItems = items;
     _api = api;
     _currentIndex = newIndex;
-    await _loadCurrentTrack();
+    await _loadCurrentTrack(initialPositionMs: initialPositionMs);
   }
 
-  Future<void> _loadCurrentTrack() async {
+  Future<void> _loadCurrentTrack({int initialPositionMs = 0}) async {
     if (_playlistItems.isEmpty || _api == null) return;
     final item = _playlistItems[_currentIndex];
     final url = _api!.getPreviewUrl(item['path']);
@@ -150,6 +151,9 @@ class AudioPlayerService extends BaseAudioHandler with SeekHandler {
       await _player.setUrl(url);
       _updateMediaItem(item);
       _syncPlaybackStateNotifier();
+      if (initialPositionMs > 0) {
+        await _player.seek(Duration(milliseconds: initialPositionMs));
+      }
       await _player.play();
     } catch (_) {}
   }
