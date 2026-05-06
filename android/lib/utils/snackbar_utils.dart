@@ -15,7 +15,7 @@ void showCopyableSnackBar(BuildContext context, String message, {bool isError = 
         },
         child: SelectableText(
           message,
-          style: TextStyle(color: isError ? Colors.red.shade100 : null),
+          style: TextStyle(color: isError ? Colors.red.shade100 : Colors.white),
         ),
       ),
       duration: duration ?? const Duration(seconds: 4),
