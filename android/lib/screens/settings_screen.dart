@@ -11,6 +11,7 @@ import '../utils/format_utils.dart';
 import 'browse_screen.dart';
 import 'trash_screen.dart';
 import 'login_screen.dart';
+
 import 'widgets/preview_image.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -359,7 +360,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (confirm == true) {
                             widget.api.clearToken();
                             if (mounted) {
-                              Navigator.of(context).popUntil((route) => route.isFirst);
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (_) => LoginScreen(
+                                    api: widget.api,
+                                    layoutPrefs: widget.layoutPrefs,
+                                    historyService: widget.historyService,
+                                    favoritesService: widget.favoritesService,
+                                    prefs: widget.prefs,
+                                  ),
+                                ),
+                              );
                             }
                           }
                         },
