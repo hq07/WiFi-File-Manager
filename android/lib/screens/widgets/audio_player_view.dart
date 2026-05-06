@@ -40,6 +40,7 @@ class AudioPlayerView extends StatefulWidget {
 
 class _AudioPlayerViewState extends State<AudioPlayerView> {
   bool _isLoading = true;
+  bool _isInitialLoadDone = false;
   bool _hasError = false;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
@@ -112,10 +113,14 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
 
     _stateSub = _player.playerStateStream.listen((state) {
       if (!mounted) return;
+      // 首次加载完成后，seek 触发的 buffering 不再显示 loading 动画
+      if (!_isInitialLoadDone &&
+          state.processingState == ProcessingState.ready) {
+        _isInitialLoadDone = true;
+        _isLoading = false;
+      }
       setState(() {
         _isPlaying = state.playing;
-        _isLoading = state.processingState == ProcessingState.loading ||
-            state.processingState == ProcessingState.buffering;
       });
       if (state.processingState == ProcessingState.completed) {
         _onTrackCompleted();
