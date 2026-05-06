@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
+import '../utils/snackbar_utils.dart';
 
 class _UploadItem {
   final String localPath;
@@ -37,7 +38,7 @@ class _UploadScreenState extends State<UploadScreen> {
   @override
   void initState() {
     super.initState();
-    _loadShares();
+    _loadShares().then((_) => _autoSelectUploadsDir());
   }
 
   @override
@@ -222,9 +223,7 @@ class _UploadScreenState extends State<UploadScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('创建失败: $e')),
-        );
+        showCopyableSnackBar(context, '创建失败: $e', isError: true);
       }
     }
   }
@@ -360,25 +359,24 @@ class _UploadScreenState extends State<UploadScreen> {
               ),
             ],
             const SizedBox(height: 16),
-            // 目标目录选择
-            DropdownButtonFormField<String>(
+            // 目标目录（固定为上传目录）
+            InputDecorator(
               decoration: const InputDecoration(
                 labelText: '目标目录',
                 border: OutlineInputBorder(),
               ),
-              value: _selectedSharePath,
-              items: _shares.map<DropdownMenuItem<String>>((s) {
-                return DropdownMenuItem(
-                  value: s['path'] as String,
-                  child: Text(s['name'] ?? s['path']),
-                );
-              }).toList(),
-              onChanged: _uploading
-                  ? null
-                  : (v) {
-                      setState(() => _selectedSharePath = v);
-                      if (v != null) _loadSubdirs(v);
-                    },
+              child: Text(
+                _selectedSharePath != null
+                    ? (_shares
+                            .where((s) => s['path'] == _selectedSharePath)
+                            .map((s) => s['name'] as String?)
+                            .firstOrNull ??
+                        _selectedSharePath!)
+                    : '加载中…',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+              ),
             ),
             // 子目录选择
             if (_subdirs.isNotEmpty) ...[
