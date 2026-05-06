@@ -4,10 +4,13 @@ import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import 'api_service.dart';
 import 'playback_state.dart';
+import 'history_service.dart';
 
 class AudioPlayerService extends BaseAudioHandler with SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   ApiService? _api;
+  HistoryService? _historyService;
+  Timer? _historyTimer;
   List<Map<String, dynamic>> _playlistItems = [];
   int _currentIndex = 0;
 
@@ -84,6 +87,22 @@ class AudioPlayerService extends BaseAudioHandler with SeekHandler {
     );
   }
 
+  void setHistoryService(HistoryService hs) {
+    _historyService = hs;
+    _historyTimer?.cancel();
+    _historyTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (_historyService == null || !_player.playing) return;
+      if (_playlistItems.isEmpty || _api == null) return;
+      final dur = _player.duration;
+      if (dur == null || dur == Duration.zero) return;
+      _historyService!.updatePosition(
+        _playlistItems[_currentIndex]['path'],
+        _player.position.inMilliseconds,
+        dur.inMilliseconds,
+      );
+    });
+  }
+
   AudioProcessingState _mapProcessingState(ProcessingState state) {
     switch (state) {
       case ProcessingState.idle:
@@ -147,13 +166,23 @@ class AudioPlayerService extends BaseAudioHandler with SeekHandler {
   void _syncPlaybackStateNotifier() {
     if (_playlistItems.isEmpty) return;
     final item = _playlistItems[_currentIndex];
+    final path = item['path'] ?? '';
     playbackStateNotifier.updatePlaying(
-      filePath: item['path'] ?? '',
+      filePath: path,
       fileName: item['name'] ?? '',
       fileSize: item['size'],
       directoryFiles: _playlistItems,
       isPlaying: _player.playing,
     );
+    // 确保历史记录条目存在，以便定时器能更新进度
+    if (_historyService != null && path.isNotEmpty) {
+      _historyService!.addEntry(
+        name: item['name'] ?? '',
+        path: path,
+        dirPath: path.substring(0, path.lastIndexOf('/')),
+        size: item['size'] as int? ?? 0,
+      );
+    }
   }
 
   void _onTrackCompleted() {

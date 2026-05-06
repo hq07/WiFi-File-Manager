@@ -17,6 +17,7 @@ void main() async {
   final favoritesService = FavoritesService();
   await favoritesService.init(prefs);
   audioPlayerService = await AudioPlayerService.create();
+  audioPlayerService.setHistoryService(historyService);
   runApp(MyApp(
     layoutPrefs: layoutPrefs,
     historyService: historyService,
