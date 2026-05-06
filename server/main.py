@@ -564,6 +564,29 @@ def discover():
     return {"ip": get_local_ip()}
 
 
+def _start_udp_discovery(port: int):
+    """Listen for UDP broadcast discovery requests on the server port."""
+    import threading
+
+    def _listen():
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.bind(("0.0.0.0", port))
+            while True:
+                data, addr = sock.recvfrom(1024)
+                if data.strip() == b"WFM_DISCOVER":
+                    ip = get_local_ip()
+                    resp = f"WFM_HERE|{ip}|{port}".encode()
+                    sock.sendto(resp, addr)
+        except Exception as e:
+            print(f"UDP discovery listener error: {e}")
+
+    t = threading.Thread(target=_listen, daemon=True)
+    t.start()
+
+
 _data_dir_name = "data.win" if _sys.platform == "win32" else "data"
 SYNC_DATA_DIR = os.path.join(os.path.dirname(__file__), _data_dir_name)
 
@@ -670,6 +693,7 @@ if __name__ == "__main__":
     import uvicorn
     local_ip = get_local_ip()
     port = config.port
+    _start_udp_discovery(port)
     print(f"\n{'='*50}")
     print(f"  WiFi File Manager Server")
     print(f"  Access from phone: http://{local_ip}:{port}")
