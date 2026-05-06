@@ -1,0 +1,12 @@
+{
+  "port": 7777,
+  "password_hash": "$2b$12$6AJnB4AKLjZVjeIpyBM02e1Wp1sY4YuurQx.b3weRwyC328VthEgy",
+  "shared_dirs": [
+    {
+      "id": "eb89b0ab",
+      "path": "C:\\Users\\HQ\\WiFi-Manager-Uploads",
+      "visible": true
+    }
+  ],
+  "uploads_dir": "C:\\Users\\HQ\\WiFi-Manager-Uploads"
+}
