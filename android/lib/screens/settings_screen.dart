@@ -39,12 +39,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _serverCacheCount = 0;
   int _serverCacheSize = 0;
   int _localCacheSize = 0;
+  String _serverVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadShares();
     _loadCacheInfo();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final v = await widget.api.getServerVersion();
+    if (mounted) setState(() => _serverVersion = v);
   }
 
   Future<void> _loadShares() async {
@@ -335,6 +342,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     }),
                   const Divider(),
+                  // 版本信息
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: Text(
+                        'APP 2.0${_serverVersion.isNotEmpty ? '  ·  服务器 $_serverVersion' : ''}',
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                      ),
+                    ),
+                  ),
                   // 退出登录
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
