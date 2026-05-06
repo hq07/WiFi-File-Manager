@@ -802,6 +802,71 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     );
   }
 
+  Widget _buildToolbarRow({required bool isFullscreen}) {
+    final ctrl = _controller!;
+    return Row(
+      children: [
+        _buildToolbarButton(
+          icon: Icons.skip_previous,
+          onTap: widget.playlist.hasPrevious
+              ? () {
+                  _saveCurrentPosition();
+                  _disposeController();
+                  widget.playlist.previous();
+                  _initVideo();
+                }
+              : null,
+          isActive: widget.playlist.hasPrevious,
+        ),
+        _buildToolbarButton(
+          icon: ctrl.value.isPlaying ? Icons.pause : Icons.play_arrow,
+          iconSize: 32,
+          onTap: _togglePlayPause,
+        ),
+        _buildToolbarButton(
+          icon: Icons.skip_next,
+          onTap: widget.playlist.hasNext
+              ? () {
+                  _saveCurrentPosition();
+                  _disposeController();
+                  widget.playlist.next();
+                  _initVideo();
+                }
+              : null,
+          isActive: widget.playlist.hasNext,
+        ),
+        _buildToolbarButton(
+          label: isFullscreen ? _fitModeLabels[_fitMode]! : null,
+          icon: _fitModeIcons[_fitMode],
+          isActive: _fitMode != VideoFitMode.fit,
+          onTap: _showFitModeSheet,
+        ),
+        _buildToolbarButton(
+          label: '${_playbackSpeed}x',
+          isActive: _playbackSpeed != 1.0,
+          onTap: _showSpeedSheet,
+        ),
+        _buildToolbarButton(
+          label: widget.sleepTimer.isActive ? widget.sleepTimer.remainingFormatted : null,
+          icon: Icons.alarm,
+          isActive: widget.sleepTimer.isActive,
+          onTap: _showSleepTimerSheet,
+        ),
+        if (isFullscreen) const Spacer(),
+        _buildToolbarButton(
+          icon: widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+          onTap: widget.onToggleFullscreen,
+        ),
+        if (widget.playlist.items.length > 1)
+          _buildToolbarButton(
+            label: '${widget.playlist.currentIndex + 1}/${widget.playlist.items.length}',
+            icon: Icons.playlist_play,
+            onTap: _showPlaylistSheet,
+          ),
+      ],
+    );
+  }
+
   Widget _buildToolbarButton({
     String? label,
     IconData? icon,
