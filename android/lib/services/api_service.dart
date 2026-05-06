@@ -289,6 +289,15 @@ class ApiService {
     await _dio.post('$_baseUrl/api/trash/empty', options: _authOptions);
   }
 
+  Future<String> getServerVersion() async {
+    try {
+      final resp = await _dio.get('$_baseUrl/api/version');
+      return resp.data['version'] ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<Map<String, dynamic>> getCacheInfo() async {
     final resp =
         await _dio.get('$_baseUrl/api/cache/info', options: _authOptions);

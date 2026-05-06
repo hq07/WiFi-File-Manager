@@ -26,6 +26,7 @@ app = FastAPI(title="WiFi File Manager", version="2.0")
 security = HTTPBearer()
 
 CHUNK_SIZE = 64 * 1024  # 64 KB
+SERVER_VERSION = "2.0"
 THUMB_CACHE_DIR = os.path.join(os.path.dirname(__file__), "data", "thumb_cache")
 
 
@@ -213,6 +214,11 @@ def get_current_user_query(token: str = Query(None), credentials: HTTPAuthorizat
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     return payload
+
+
+@app.get("/api/version")
+def get_version():
+    return {"version": SERVER_VERSION}
 
 
 @app.post("/api/login", response_model=LoginResponse)
