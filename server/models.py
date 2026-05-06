@@ -34,6 +34,7 @@ class FileItem(BaseModel):
     modified: str
     duration: float | None = None    # seconds, for audio/video files
     resolution: str | None = None    # "1920x1080", for image/video files
+    display_aspect_ratio: float | None = None  # correct DAR accounting for SAR
 
 
 class FileListResponse(BaseModel):

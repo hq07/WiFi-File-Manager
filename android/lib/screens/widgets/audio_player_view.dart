@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import 'package:volume_controller/volume_controller.dart';
 import '../../services/api_service.dart';
 import '../../utils/format_utils.dart';
+import '../../services/history_service.dart';
 import 'media_info_panel.dart';
 import 'playlist_manager.dart';
 import 'sleep_timer_manager.dart';
@@ -15,6 +16,7 @@ class AudioPlayerView extends StatefulWidget {
   final int? fileSize;
   final PlaylistManager playlist;
   final SleepTimerManager sleepTimer;
+  final HistoryService? historyService;
 
   const AudioPlayerView({
     super.key,
@@ -24,6 +26,7 @@ class AudioPlayerView extends StatefulWidget {
     this.fileSize,
     required this.playlist,
     required this.sleepTimer,
+    this.historyService,
   });
 
   @override
@@ -36,6 +39,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   bool _hasError = false;
   double _playbackSpeed = 1.0;
   double _currentVolume = 0.5;
+  Timer? _positionUpdateTimer;
 
   static const List<double> _speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
   static const List<int> _sleepTimerOptions = [15, 30, 45, 60, 90];
@@ -76,6 +80,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       if (mounted) {
         setState(() => _isLoading = false);
         _controller!.play();
+        _startHistoryTracking();
       }
     } catch (e) {
       if (mounted) {
@@ -87,11 +92,45 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
     }
   }
 
+  void _startHistoryTracking() {
+    final hs = widget.historyService;
+    if (hs == null) return;
+    final item = widget.playlist.currentItem;
+    hs.addEntry(
+      name: item['name'] ?? widget.fileName,
+      path: widget.filePath,
+      dirPath: widget.filePath.substring(0, widget.filePath.lastIndexOf('/')),
+      size: item['size'] as int? ?? widget.fileSize ?? 0,
+    );
+    _positionUpdateTimer?.cancel();
+    _positionUpdateTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      final ctrl = _controller;
+      if (ctrl == null || !ctrl.value.isInitialized || !ctrl.value.isPlaying) return;
+      hs.updatePosition(
+        widget.filePath,
+        ctrl.value.position.inMilliseconds,
+        ctrl.value.duration.inMilliseconds,
+      );
+    });
+  }
+
+  void _saveCurrentPosition() {
+    final hs = widget.historyService;
+    final ctrl = _controller;
+    if (hs == null || ctrl == null || !ctrl.value.isInitialized) return;
+    hs.updatePosition(
+      widget.filePath,
+      ctrl.value.position.inMilliseconds,
+      ctrl.value.duration.inMilliseconds,
+    );
+  }
+
   void _onAudioProgress() {
     final ctrl = _controller;
     if (ctrl == null) return;
     if (ctrl.value.position >= ctrl.value.duration &&
         ctrl.value.duration > Duration.zero) {
+      widget.historyService?.markCompleted(widget.filePath);
       if (widget.playlist.hasNext) {
         widget.playlist.next();
       } else {
@@ -110,6 +149,8 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
 
   @override
   void dispose() {
+    _saveCurrentPosition();
+    _positionUpdateTimer?.cancel();
     _disposeController();
     super.dispose();
   }

@@ -5,10 +5,13 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
 import '../../services/api_service.dart';
 import '../../utils/format_utils.dart';
+import '../../services/history_service.dart';
 import 'gesture_handler.dart';
 import 'media_info_panel.dart';
 import 'playlist_manager.dart';
 import 'sleep_timer_manager.dart';
+
+enum VideoFitMode { fit, stretch, original }
 
 class VideoPlayerView extends StatefulWidget {
   final ApiService api;
@@ -19,6 +22,7 @@ class VideoPlayerView extends StatefulWidget {
   final SleepTimerManager sleepTimer;
   final VoidCallback onToggleFullscreen;
   final bool isFullscreen;
+  final HistoryService? historyService;
 
   const VideoPlayerView({
     super.key,
@@ -30,6 +34,7 @@ class VideoPlayerView extends StatefulWidget {
     required this.sleepTimer,
     required this.onToggleFullscreen,
     required this.isFullscreen,
+    this.historyService,
   });
 
   @override
@@ -49,6 +54,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   double _currentVolume = 0;
   Timer? _hideControlsTimer;
   Timer? _hideOverlayTimer;
+  Timer? _positionUpdateTimer;
 
   // Gesture overlay state
   OverlayEntry? _gestureOverlay;
@@ -57,6 +63,9 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   // Speed options
   static const List<double> _speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
   double _playbackSpeed = 1.0;
+
+  // Video fit mode
+  VideoFitMode _fitMode = VideoFitMode.fit;
 
   // Sleep timer options in minutes
   static const List<int> _sleepTimerOptions = [15, 30, 45, 60, 90];
@@ -104,6 +113,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         });
         _controller!.play();
         _startHideControlsTimer();
+        _startHistoryTracking();
       }
     } catch (e) {
       if (mounted) {
@@ -115,11 +125,45 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     }
   }
 
+  void _startHistoryTracking() {
+    final hs = widget.historyService;
+    if (hs == null) return;
+    final item = widget.playlist.currentItem;
+    hs.addEntry(
+      name: item['name'] ?? widget.fileName,
+      path: widget.filePath,
+      dirPath: widget.filePath.substring(0, widget.filePath.lastIndexOf('/')),
+      size: item['size'] as int? ?? widget.fileSize ?? 0,
+    );
+    _positionUpdateTimer?.cancel();
+    _positionUpdateTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      final ctrl = _controller;
+      if (ctrl == null || !ctrl.value.isInitialized || !ctrl.value.isPlaying) return;
+      hs.updatePosition(
+        widget.filePath,
+        ctrl.value.position.inMilliseconds,
+        ctrl.value.duration.inMilliseconds,
+      );
+    });
+  }
+
+  void _saveCurrentPosition() {
+    final hs = widget.historyService;
+    final ctrl = _controller;
+    if (hs == null || ctrl == null || !ctrl.value.isInitialized) return;
+    hs.updatePosition(
+      widget.filePath,
+      ctrl.value.position.inMilliseconds,
+      ctrl.value.duration.inMilliseconds,
+    );
+  }
+
   void _onVideoProgress() {
     final ctrl = _controller;
     if (ctrl == null) return;
     if (ctrl.value.position >= ctrl.value.duration &&
         ctrl.value.duration > Duration.zero) {
+      widget.historyService?.markCompleted(widget.filePath);
       // Auto-advance to next playlist item
       if (widget.playlist.hasNext) {
         widget.playlist.next();
@@ -139,6 +183,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
 
   @override
   void dispose() {
+    _saveCurrentPosition();
+    _positionUpdateTimer?.cancel();
     _disposeController();
     _hideControlsTimer?.cancel();
     _hideOverlayTimer?.cancel();
@@ -444,6 +490,102 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     );
   }
 
+  // ---- Video fit mode ----
+
+  double get _displayAspectRatio {
+    // Use server-provided DAR (accounts for SAR), fall back to pixel ratio
+    final dar = widget.playlist.currentItem['display_aspect_ratio'];
+    if (dar is num && dar > 0) return dar.toDouble();
+    return _controller!.value.aspectRatio;
+  }
+
+  Widget _buildVideoSurface() {
+    final ctrl = _controller!;
+    switch (_fitMode) {
+      case VideoFitMode.fit:
+        return Center(
+          child: AspectRatio(
+            aspectRatio: _displayAspectRatio,
+            child: VideoPlayer(ctrl),
+          ),
+        );
+      case VideoFitMode.stretch:
+        return SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.fill,
+            child: SizedBox(
+              width: ctrl.value.size.width,
+              height: ctrl.value.size.height,
+              child: VideoPlayer(ctrl),
+            ),
+          ),
+        );
+      case VideoFitMode.original:
+        return Center(
+          child: SizedBox(
+            width: ctrl.value.size.width,
+            height: ctrl.value.size.height,
+            child: VideoPlayer(ctrl),
+          ),
+        );
+    }
+  }
+
+  static const Map<VideoFitMode, String> _fitModeLabels = {
+    VideoFitMode.fit: '适配',
+    VideoFitMode.stretch: '拉伸',
+    VideoFitMode.original: '100%',
+  };
+
+  static const Map<VideoFitMode, IconData> _fitModeIcons = {
+    VideoFitMode.fit: Icons.fit_screen,
+    VideoFitMode.stretch: Icons.aspect_ratio,
+    VideoFitMode.original: Icons.photo_size_select_actual,
+  };
+
+  void _showFitModeSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('画面适应',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black87)),
+              ),
+              ...VideoFitMode.values.map((mode) => ListTile(
+                    leading: Icon(
+                      _fitModeIcons[mode],
+                      color: _fitMode == mode
+                          ? const Color(0xFF6C63FF)
+                          : (isDark ? Colors.white70 : Colors.black54),
+                    ),
+                    title: Text(_fitModeLabels[mode]!,
+                        style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black87)),
+                    trailing: _fitMode == mode
+                        ? const Icon(Icons.check, color: Color(0xFF6C63FF))
+                        : null,
+                    onTap: () {
+                      setState(() => _fitMode = mode);
+                      Navigator.pop(ctx);
+                    },
+                  )),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   // ---- Build ----
 
   @override
@@ -490,12 +632,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
             onTap: _toggleControls,
             child: Container(
               color: Colors.black,
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: _controller!.value.aspectRatio,
-                  child: VideoPlayer(_controller!),
-                ),
-              ),
+              child: _buildVideoSurface(),
             ),
           ),
         ),
@@ -673,6 +810,26 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
                       : null,
                 ),
                 const Spacer(),
+                // Fit mode badge
+                GestureDetector(
+                  onTap: _showFitModeSheet,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _fitMode != VideoFitMode.fit
+                          ? const Color(0xFF6C63FF).withOpacity(0.7)
+                          : Colors.white24,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _fitModeLabels[_fitMode]!,
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
                 // Speed badge
                 GestureDetector(
                   onTap: _showSpeedSheet,
