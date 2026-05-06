@@ -75,6 +75,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       audioPlayerService.loadPlaylist(
         sameTypeFiles,
         startIndex: startIdx >= 0 ? startIdx : 0,
+        initialPositionMs: widget.initialPositionMs,
         api: widget.api,
       );
     }
