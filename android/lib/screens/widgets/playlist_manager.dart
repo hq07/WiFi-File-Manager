@@ -89,6 +89,12 @@ class PlaylistManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  void jumpTo(int index) {
+    if (index < 0 || index >= _items.length) return;
+    _currentIndex = index;
+    notifyListeners();
+  }
+
   void toggleShuffle() {
     _shuffle = !_shuffle;
     if (_shuffle) _generateShuffleOrder();
