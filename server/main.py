@@ -334,14 +334,39 @@ def download_file(path: str, user=Depends(get_current_user)):
     )
 
 
+TRASH_ORIGIN_FILE = os.path.join(os.path.dirname(__file__), "data", "trash_origin.json")
+
+
+def _load_trash_origins() -> dict:
+    os.makedirs(os.path.dirname(TRASH_ORIGIN_FILE), exist_ok=True)
+    if os.path.exists(TRASH_ORIGIN_FILE):
+        try:
+            with open(TRASH_ORIGIN_FILE, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return {}
+
+
+def _save_trash_origins(data: dict):
+    os.makedirs(os.path.dirname(TRASH_ORIGIN_FILE), exist_ok=True)
+    with open(TRASH_ORIGIN_FILE, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
 @app.post("/api/files/trash")
 def trash_file(path: str, user=Depends(get_current_user)):
-    """Move file/folder to system trash."""
+    """Move file/folder to system trash and record original location."""
     from send2trash import send2trash
     if not config.is_path_allowed(path):
         raise HTTPException(status_code=403, detail="Access denied")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not found")
+    original_parent = os.path.dirname(path)
+    name = os.path.basename(path)
+    origins = _load_trash_origins()
+    origins[name] = original_parent
+    _save_trash_origins(origins)
     send2trash(path)
     return {"status": "ok"}
 
@@ -356,6 +381,10 @@ def delete_file(path: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="File not found")
     if not os.path.realpath(path).startswith(os.path.realpath(trash_dir)):
         raise HTTPException(status_code=403, detail="Can only permanently delete from trash")
+    name = os.path.basename(path)
+    origins = _load_trash_origins()
+    origins.pop(name, None)
+    _save_trash_origins(origins)
     if os.path.isfile(path):
         os.remove(path)
     elif os.path.isdir(path):
@@ -374,6 +403,7 @@ def list_trash(path: str = "", user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Access denied")
     if not os.path.isdir(target):
         raise HTTPException(status_code=404, detail="Directory not found")
+    origins = _load_trash_origins()
     items = []
     for name in sorted(os.listdir(target)):
         if name.startswith('.'):
@@ -387,6 +417,7 @@ def list_trash(path: str = "", user=Depends(get_current_user)):
                 "is_dir": os.path.isdir(full_path),
                 "size": stat.st_size if os.path.isfile(full_path) else 0,
                 "deleted_at": os.path.getmtime(full_path),
+                "original_path": origins.get(name, ""),
             })
         except OSError:
             continue
@@ -395,20 +426,27 @@ def list_trash(path: str = "", user=Depends(get_current_user)):
 
 @app.post("/api/trash/restore")
 def restore_trash(name: str, user=Depends(get_current_user)):
-    """Restore a file from system trash."""
+    """Restore a file from system trash to its original location."""
     if platform.system() != "Darwin":
         raise HTTPException(status_code=400, detail="Trash restore is only supported on macOS")
     trash_dir = os.path.expanduser("~/.Trash")
     src = os.path.join(trash_dir, name)
     if not os.path.exists(src):
         raise HTTPException(status_code=404, detail="File not found in trash")
-    home = os.path.expanduser("~")
-    dst = os.path.join(home, name)
+    # Determine restore target: stored origin > uploads_dir > home
+    origins = _load_trash_origins()
+    original_parent = origins.pop(name, None)
+    if original_parent and os.path.isdir(original_parent):
+        dst = os.path.join(original_parent, name)
+    else:
+        dst = os.path.join(config.uploads_dir, name)
+    _save_trash_origins(origins)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
     if os.path.exists(dst):
         base, ext = os.path.splitext(name)
         i = 1
         while os.path.exists(dst):
-            dst = os.path.join(home, f"{base} ({i}){ext}")
+            dst = os.path.join(os.path.dirname(dst), f"{base} ({i}){ext}")
             i += 1
     shutil.move(src, dst)
     return {"status": "ok", "restored_to": dst}

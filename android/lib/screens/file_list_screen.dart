@@ -39,10 +39,15 @@ class _FileListScreenState extends State<FileListScreen> {
   late String _currentPath;
   late LayoutMode _layoutMode;
 
+  String _joinPath(String base, String name) {
+    if (base.endsWith('/')) return '$base$name';
+    return '$base/$name';
+  }
+
   @override
   void initState() {
     super.initState();
-    _currentPath = widget.path;
+    _currentPath = widget.path.replaceAll(RegExp(r'/+'), '/');
     _layoutMode = widget.layoutPrefs.layoutMode;
     _loadFiles();
   }
@@ -69,13 +74,14 @@ class _FileListScreenState extends State<FileListScreen> {
 
   void _onItemTap(Map<String, dynamic> item) {
     if (item['type'] == 'folder') {
+      final folderPath = item['path'] as String? ?? _joinPath(_currentPath, item['name']);
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => FileListScreen(
             api: widget.api,
             layoutPrefs: widget.layoutPrefs,
-            path: '$_currentPath/${item['name']}',
+            path: folderPath,
             title: item['name'],
             historyService: widget.historyService,
             favoritesService: widget.favoritesService,
@@ -84,13 +90,13 @@ class _FileListScreenState extends State<FileListScreen> {
         ),
       );
     } else {
-      final filePath = '$_currentPath/${item['name']}';
+      final filePath = '${_joinPath(_currentPath, item['name'])}';
       final directoryFiles = _items
           .where((f) => f['type'] == 'file')
           .map((f) => {
                 'name': f['name'] as String,
                 'size': f['size'] as int,
-                'path': '$_currentPath/${f['name']}',
+                'path': '${_joinPath(_currentPath, f['name'])}',
                 if (f.containsKey('display_aspect_ratio'))
                   'display_aspect_ratio': f['display_aspect_ratio'],
               })
@@ -116,7 +122,7 @@ class _FileListScreenState extends State<FileListScreen> {
   }
 
   void _onItemLongPress(Map<String, dynamic> item) {
-    final itemPath = '$_currentPath/${item['name']}';
+    final itemPath = '${_joinPath(_currentPath, item['name'])}';
     final isFav = widget.favoritesService?.isFavorite(itemPath) ?? false;
     showModalBottomSheet(
       context: context,
@@ -164,7 +170,7 @@ class _FileListScreenState extends State<FileListScreen> {
   }
 
   Future<void> _downloadFile(Map<String, dynamic> item) async {
-    final filePath = '$_currentPath/${item['name']}';
+    final filePath = '${_joinPath(_currentPath, item['name'])}';
     final dir = await getApplicationDocumentsDirectory();
     final savePath = '${dir.path}/${item['name']}';
     try {
@@ -196,7 +202,7 @@ class _FileListScreenState extends State<FileListScreen> {
     );
     if (confirmed == true) {
       try {
-        await widget.api.trashFile('$_currentPath/${item['name']}');
+        await widget.api.trashFile('${_joinPath(_currentPath, item['name'])}');
         _loadFiles();
       } catch (e) {
         if (mounted) {
@@ -228,7 +234,7 @@ class _FileListScreenState extends State<FileListScreen> {
     );
     if (newName != null && newName.isNotEmpty && newName != item['name']) {
       try {
-        await widget.api.renameFile('$_currentPath/${item['name']}', newName);
+        await widget.api.renameFile('${_joinPath(_currentPath, item['name'])}', newName);
         _loadFiles();
       } catch (e) {
         if (mounted) {
@@ -257,7 +263,7 @@ class _FileListScreenState extends State<FileListScreen> {
     final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
     final isVideo = ['mp4', 'avi', 'mkv', 'mov', 'webm'].contains(ext);
     if ((isImage || isVideo) && widget.layoutPrefs.showThumbnails) {
-      final filePath = '$_currentPath/$name';
+      final filePath = '${_joinPath(_currentPath, name)}';
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
         child: SizedBox(
@@ -289,7 +295,7 @@ class _FileListScreenState extends State<FileListScreen> {
     final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
     final isVideo = ['mp4', 'avi', 'mkv', 'mov', 'webm'].contains(ext);
     if ((isImage || isVideo) && widget.layoutPrefs.showThumbnails) {
-      final filePath = '$_currentPath/$name';
+      final filePath = '${_joinPath(_currentPath, name)}';
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: PreviewImage(
