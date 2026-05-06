@@ -136,6 +136,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       await audioPlayerService.loadPlaylist(
         widget.playlist.items,
         startIndex: widget.playlist.currentIndex,
+        initialPositionMs: isSameTrack ? 0 : widget.initialPositionMs,
         api: widget.api,
       );
 
@@ -145,12 +146,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
         _duration = _player.duration ?? Duration.zero;
         _isPlaying = _player.playing;
         _isLoading = false;
-      } else {
-        // 新歌：恢复历史进度
-        final seekMs = widget.initialPositionMs;
-        if (seekMs > 0) {
-          await _player.seek(Duration(milliseconds: seekMs));
-        }
       }
 
       await audioPlayerService.setSpeed(_playbackSpeed);
