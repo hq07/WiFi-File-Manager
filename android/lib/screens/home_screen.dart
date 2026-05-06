@@ -126,12 +126,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => UploadScreen(api: widget.api)),
+      floatingActionButton: ListenableBuilder(
+        listenable: playbackStateNotifier,
+        builder: (context, fab) {
+          if (playbackStateNotifier.isActive) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 72),
+              child: fab,
+            );
+          }
+          return fab!;
+        },
+        child: FloatingActionButton(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => UploadScreen(api: widget.api)),
+          ),
+          child: const Icon(Icons.upload_file),
         ),
-        child: const Icon(Icons.upload_file),
       ),
       body: Column(
         children: [
