@@ -104,9 +104,22 @@ class AudioPlayerService extends BaseAudioHandler with SeekHandler {
     int startIndex = 0,
     required ApiService api,
   }) async {
+    final newIndex = startIndex.clamp(0, items.length - 1);
+
+    // 跳过重复加载：如果播放列表和当前曲目相同，不重新加载
+    if (_playlistItems.isNotEmpty &&
+        _currentIndex == newIndex &&
+        _playlistItems.length == items.length &&
+        _playlistItems[_currentIndex]['path'] == items[newIndex]['path']) {
+      _playlistItems = items;
+      _api = api;
+      _syncPlaybackStateNotifier();
+      return;
+    }
+
     _playlistItems = items;
     _api = api;
-    _currentIndex = startIndex.clamp(0, items.length - 1);
+    _currentIndex = newIndex;
     await _loadCurrentTrack();
   }
 
