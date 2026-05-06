@@ -174,11 +174,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addFolder,
-        icon: const Icon(Icons.add),
-        label: const Text('添加文件夹'),
+      appBar: AppBar(
+        title: const Text('设置'),
+        actions: [
+          IconButton(
+            onPressed: _addFolder,
+            icon: const Icon(Icons.create_new_folder),
+            tooltip: '添加文件夹',
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
