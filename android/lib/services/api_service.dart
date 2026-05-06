@@ -1,4 +1,7 @@
 // android/lib/services/api_service.dart
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -48,8 +51,58 @@ class ApiService {
   bool get isLoggedIn => _token != null;
 
   Future<String?> discoverServer() async {
-    final savedIp = await getSavedIp();
     final port = await getSavedPort() ?? '7777';
+    final portNum = int.parse(port);
+
+    // Try UDP broadcast discovery
+    try {
+      final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      socket.broadcastEnabled = true;
+
+      // Send to each interface's /24 broadcast address (covers most LANs)
+      var sent = false;
+      try {
+        for (final iface in await NetworkInterface.list(type: InternetAddressType.IPv4)) {
+          for (final addr in iface.addresses) {
+            if (addr.address == '127.0.0.1') continue;
+            final ip = addr.rawAddress;
+            final bcast = InternetAddress.fromRawAddress(Uint8List.fromList([ip[0], ip[1], ip[2], 255]));
+            socket.send('WFM_DISCOVER'.codeUnits, bcast, portNum);
+            sent = true;
+          }
+        }
+      } catch (_) {}
+
+      // Fallback to global broadcast
+      if (!sent) {
+        socket.send('WFM_DISCOVER'.codeUnits, InternetAddress('255.255.255.255'), portNum);
+      }
+
+      final completer = Completer<Datagram?>();
+      final sub = socket.listen((event) {
+        if (event == RawSocketEvent.read && !completer.isCompleted) {
+          completer.complete(socket.receive());
+        }
+      });
+
+      final dg = await Future.any([
+        completer.future,
+        Future<Datagram?>.delayed(const Duration(seconds: 3)),
+      ]);
+      await sub.cancel();
+      socket.close();
+
+      if (dg != null) {
+        final msg = String.fromCharCodes(dg.data);
+        if (msg.startsWith('WFM_HERE|')) {
+          final parts = msg.split('|');
+          if (parts.length >= 2) return parts[1];
+        }
+      }
+    } catch (_) {}
+
+    // Fall back: try the saved IP via HTTP
+    final savedIp = await getSavedIp();
     if (savedIp == null) return null;
     try {
       final resp = await Dio().get('http://$savedIp:$port/api/discover',
