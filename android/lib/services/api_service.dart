@@ -67,15 +67,19 @@ class ApiService {
             if (addr.address == '127.0.0.1') continue;
             final ip = addr.rawAddress;
             final bcast = InternetAddress.fromRawAddress(Uint8List.fromList([ip[0], ip[1], ip[2], 255]));
-            socket.send('WFM_DISCOVER'.codeUnits, bcast, portNum);
+            final count = socket.send('WFM_DISCOVER'.codeUnits, bcast, portNum);
+            debugPrint('[Discovery] UDP sent to $bcast:$portNum ($count bytes) via ${addr.address}');
             sent = true;
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[Discovery] Interface scan error: $e');
+      }
 
       // Fallback to global broadcast
       if (!sent) {
-        socket.send('WFM_DISCOVER'.codeUnits, InternetAddress('255.255.255.255'), portNum);
+        final count = socket.send('WFM_DISCOVER'.codeUnits, InternetAddress('255.255.255.255'), portNum);
+        debugPrint('[Discovery] UDP fallback broadcast ($count bytes)');
       }
 
       final completer = Completer<Datagram?>();
@@ -94,21 +98,29 @@ class ApiService {
 
       if (dg != null) {
         final msg = String.fromCharCodes(dg.data);
+        debugPrint('[Discovery] UDP response: $msg');
         if (msg.startsWith('WFM_HERE|')) {
           final parts = msg.split('|');
           if (parts.length >= 2) return parts[1];
         }
+      } else {
+        debugPrint('[Discovery] UDP timeout (3s)');
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Discovery] UDP error: $e');
+    }
 
     // Fall back: try the saved IP via HTTP
     final savedIp = await getSavedIp();
+    debugPrint('[Discovery] HTTP fallback, savedIp=$savedIp');
     if (savedIp == null) return null;
     try {
       final resp = await Dio().get('http://$savedIp:$port/api/discover',
           options: Options(receiveTimeout: const Duration(seconds: 3)));
       return resp.data['ip'] ?? savedIp;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Discovery] HTTP fallback error: $e');
+    }
     return null;
   }
 
@@ -180,6 +192,11 @@ class ApiService {
     final resp =
         await _dio.get('$_baseUrl/api/uploads-dir', options: _authOptions);
     return resp.data;
+  }
+
+  Future<void> trashFile(String path) async {
+    await _dio.post('$_baseUrl/api/files/trash',
+        queryParameters: {'path': path}, options: _authOptions);
   }
 
   Future<void> deleteFile(String path) async {
