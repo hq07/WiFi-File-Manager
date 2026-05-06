@@ -133,21 +133,11 @@ class _UploadScreenState extends State<UploadScreen> {
 
     } on PlatformException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('选择文件夹失败: ${e.code}\n${e.message}\n${e.details}'),
-            duration: const Duration(seconds: 8),
-          ),
-        );
+        showCopyableSnackBar(context, '选择文件夹失败: ${e.code}\n${e.message}\n${e.details}', isError: true, duration: const Duration(seconds: 8));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('选择文件夹异常: $e'),
-            duration: const Duration(seconds: 8),
-          ),
-        );
+        showCopyableSnackBar(context, '选择文件夹异常: $e', isError: true, duration: const Duration(seconds: 8));
       }
     }
   }

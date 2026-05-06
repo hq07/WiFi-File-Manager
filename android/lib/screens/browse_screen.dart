@@ -54,11 +54,16 @@ class _BrowseScreenState extends State<BrowseScreen> {
     });
     try {
       final data = await widget.api.browsePath(path);
+      final dirs = List<String>.from(data['dirs']);
+      final message = data['message'] as String?;
       setState(() {
         _currentPath = data['path'];
-        _dirs = List<String>.from(data['dirs']);
+        _dirs = dirs;
         _loading = false;
       });
+      if (message != null && mounted) {
+        showCopyableSnackBar(context, message, isError: true);
+      }
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
