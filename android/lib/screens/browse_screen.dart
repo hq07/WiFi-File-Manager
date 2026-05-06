@@ -1,6 +1,7 @@
 // android/lib/screens/browse_screen.dart
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../utils/snackbar_utils.dart';
 
 class BrowseScreen extends StatefulWidget {
   final ApiService api;
@@ -41,9 +42,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载失败: $e')),
-        );
+        showCopyableSnackBar(context, '加载失败: $e', isError: true);
       }
     }
   }
@@ -63,9 +62,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法访问: $e')),
-        );
+        showCopyableSnackBar(context, '无法访问: $e', isError: true);
       }
     }
   }
@@ -82,9 +79,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('添加失败: $e')),
-        );
+        showCopyableSnackBar(context, '添加失败: $e', isError: true);
       }
     }
   }

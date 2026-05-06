@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../utils/format_utils.dart';
+import '../utils/snackbar_utils.dart';
 
 class TrashScreen extends StatefulWidget {
   final ApiService api;
@@ -36,7 +37,7 @@ class _TrashScreenState extends State<TrashScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载失败: $e')));
+      showCopyableSnackBar(context, '加载失败: $e', isError: true);
     }
   }
 
@@ -67,7 +68,7 @@ class _TrashScreenState extends State<TrashScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('恢复失败: $e')));
+        showCopyableSnackBar(context, '恢复失败: $e', isError: true);
       }
     }
   }
@@ -96,7 +97,7 @@ class _TrashScreenState extends State<TrashScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+        showCopyableSnackBar(context, '删除失败: $e', isError: true);
       }
     }
   }
@@ -125,7 +126,7 @@ class _TrashScreenState extends State<TrashScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('清空失败: $e')));
+        showCopyableSnackBar(context, '清空失败: $e', isError: true);
       }
     }
   }

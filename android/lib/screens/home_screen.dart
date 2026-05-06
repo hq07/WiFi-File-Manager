@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/layout_prefs.dart';
 import '../services/history_service.dart';
+import '../utils/snackbar_utils.dart';
 import '../services/favorites_service.dart';
 import '../services/playback_state.dart';
 import '../utils/format_utils.dart';
@@ -215,9 +216,7 @@ class _HomeTabState extends State<_HomeTab> {
     } catch (e) {
       setState(() { _loading = false; });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        showCopyableSnackBar(context, 'Error: $e', isError: true);
       }
     }
   }

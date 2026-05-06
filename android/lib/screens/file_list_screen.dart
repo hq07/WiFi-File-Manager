@@ -6,6 +6,7 @@ import '../services/layout_prefs.dart';
 import '../services/history_service.dart';
 import '../services/favorites_service.dart';
 import '../utils/format_utils.dart';
+import '../utils/snackbar_utils.dart';
 import 'media_player_screen.dart';
 import 'widgets/preview_image.dart';
 
@@ -54,7 +55,7 @@ class _FileListScreenState extends State<FileListScreen> {
     } catch (e) {
       setState(() { _loading = false; });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        showCopyableSnackBar(context, 'Error: $e', isError: true);
       }
     }
   }
@@ -173,7 +174,7 @@ class _FileListScreenState extends State<FileListScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+        showCopyableSnackBar(context, 'Download failed: $e', isError: true);
       }
     }
   }
@@ -183,7 +184,7 @@ class _FileListScreenState extends State<FileListScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('确认删除'),
-        content: Text('确定要删除 "${item['name']}" 吗？'),
+        content: Text('确定要将 "${item['name']}" 移入废纸篓吗？'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           TextButton(
@@ -195,11 +196,11 @@ class _FileListScreenState extends State<FileListScreen> {
     );
     if (confirmed == true) {
       try {
-        await widget.api.deleteFile('$_currentPath/${item['name']}');
+        await widget.api.trashFile('$_currentPath/${item['name']}');
         _loadFiles();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败: $e')));
+          showCopyableSnackBar(context, '删除失败: $e', isError: true);
         }
       }
     }
@@ -231,7 +232,7 @@ class _FileListScreenState extends State<FileListScreen> {
         _loadFiles();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('重命名失败: $e')));
+          showCopyableSnackBar(context, '重命名失败: $e', isError: true);
         }
       }
     }
