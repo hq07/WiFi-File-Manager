@@ -196,6 +196,7 @@ class AudioPlayerService extends BaseAudioHandler with SeekHandler {
     }
   }
 
+  @override
   Future<void> setSpeed(double speed) async {
     await _player.setSpeed(speed);
   }

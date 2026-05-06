@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../../services/api_service.dart';
+import '../../services/history_service.dart';
 import '../../utils/format_utils.dart';
 import 'media_info_panel.dart';
 
@@ -9,6 +10,7 @@ class TextCodeView extends StatefulWidget {
   final String filePath;
   final String fileName;
   final int? fileSize;
+  final HistoryService? historyService;
 
   const TextCodeView({
     super.key,
@@ -16,6 +18,7 @@ class TextCodeView extends StatefulWidget {
     required this.filePath,
     required this.fileName,
     this.fileSize,
+    this.historyService,
   });
 
   @override
@@ -67,6 +70,12 @@ class _TextCodeViewState extends State<TextCodeView> {
         _content = resp.data ?? '';
         _loading = false;
       });
+      widget.historyService?.addEntry(
+        name: widget.fileName,
+        path: widget.filePath,
+        dirPath: widget.filePath.substring(0, widget.filePath.lastIndexOf('/')),
+        size: widget.fileSize ?? 0,
+      );
     } catch (e) {
       setState(() {
         _error = '加载失败: $e';

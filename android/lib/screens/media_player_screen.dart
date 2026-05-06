@@ -4,6 +4,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/api_service.dart';
 import '../services/history_service.dart';
 import '../services/layout_prefs.dart';
+import '../services/audio_handler.dart';
 import 'widgets/sleep_timer_manager.dart';
 import 'widgets/playlist_manager.dart';
 import 'widgets/video_player_view.dart';
@@ -70,6 +71,14 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
     _playlist.setItems(sameTypeFiles, startIndex: startIdx >= 0 ? startIdx : 0);
     _playlist.addListener(_onPlaylistChange);
 
+    if (_mediaType == MediaType.audio) {
+      audioPlayerService.loadPlaylist(
+        sameTypeFiles,
+        startIndex: startIdx >= 0 ? startIdx : 0,
+        api: widget.api,
+      );
+    }
+
     if (_mediaType == MediaType.video || _mediaType == MediaType.audio) {
       WakelockPlus.enable();
     }
@@ -80,12 +89,17 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
     _playlist.removeListener(_onPlaylistChange);
     _sleepTimer.dispose();
     _playlist.dispose();
-    WakelockPlus.disable();
+    if (_mediaType == MediaType.video) {
+      WakelockPlus.disable();
+    }
     if (_isFullscreen) _exitFullscreen();
     super.dispose();
   }
 
   void _onPlaylistChange() {
+    if (_mediaType == MediaType.audio) {
+      audioPlayerService.skipToIndex(_playlist.currentIndex);
+    }
     setState(() {});
   }
 
@@ -151,6 +165,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       sleepTimer: _sleepTimer,
       onToggleFullscreen: _toggleFullscreen,
       isFullscreen: _isFullscreen,
+      historyService: widget.historyService,
     );
   }
   Widget _buildAudioPlaceholder() {
@@ -162,6 +177,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       fileSize: item['size'],
       playlist: _playlist,
       sleepTimer: _sleepTimer,
+      historyService: widget.historyService,
     );
   }
   Widget _buildImagePlaceholder() {
@@ -172,6 +188,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       fileName: item['name'] ?? widget.fileName,
       fileSize: item['size'],
       playlist: _playlist,
+      historyService: widget.historyService,
     );
   }
   Widget _buildTextPlaceholder() {
@@ -181,6 +198,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       filePath: widget.filePath,
       fileName: item['name'] ?? widget.fileName,
       fileSize: item['size'],
+      historyService: widget.historyService,
     );
   }
 }

@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../services/layout_prefs.dart';
 import '../services/history_service.dart';
 import '../services/favorites_service.dart';
+import '../services/playback_state.dart';
 import '../utils/format_utils.dart';
 import 'file_list_screen.dart';
 import 'upload_screen.dart';
@@ -13,6 +14,7 @@ import 'favorites_page.dart';
 import 'history_page.dart';
 import 'search_screen.dart';
 import 'disk_page.dart';
+import 'widgets/mini_player.dart';
 
 class HomeScreen extends StatefulWidget {
   final ApiService api;
@@ -131,7 +133,20 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: const Icon(Icons.upload_file),
       ),
-      body: pages[_currentTab],
+      body: Column(
+        children: [
+          Expanded(child: pages[_currentTab]),
+          ListenableBuilder(
+            listenable: playbackStateNotifier,
+            builder: (context, _) {
+              if (playbackStateNotifier.isActive) {
+                return MiniPlayer(api: widget.api);
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentTab,
         onDestinationSelected: (i) => setState(() => _currentTab = i),
