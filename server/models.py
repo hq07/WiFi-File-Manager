@@ -32,6 +32,7 @@ class FileItem(BaseModel):
     type: str  # "file" or "folder"
     size: int
     modified: str
+    path: str | None = None          # full path (only set for virtual root items)
     duration: float | None = None    # seconds, for audio/video files
     resolution: str | None = None    # "1920x1080", for image/video files
     display_aspect_ratio: float | None = None  # correct DAR accounting for SAR

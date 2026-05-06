@@ -789,75 +789,12 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
                 top: 2,
                 bottom: bottomPadding + 4,
               ),
-              child: Row(
-                children: [
-                  // Prev
-                  _buildToolbarButton(
-                    icon: Icons.skip_previous,
-                    onTap: widget.playlist.hasPrevious
-                        ? () {
-                            _saveCurrentPosition();
-                            _disposeController();
-                            widget.playlist.previous();
-                            _initVideo();
-                          }
-                        : null,
-                    isActive: widget.playlist.hasPrevious,
-                  ),
-                  // Play/Pause
-                  _buildToolbarButton(
-                    icon: ctrl.value.isPlaying ? Icons.pause : Icons.play_arrow,
-                    iconSize: 32,
-                    onTap: _togglePlayPause,
-                  ),
-                  // Next
-                  _buildToolbarButton(
-                    icon: Icons.skip_next,
-                    onTap: widget.playlist.hasNext
-                        ? () {
-                            _saveCurrentPosition();
-                            _disposeController();
-                            widget.playlist.next();
-                            _initVideo();
-                          }
-                        : null,
-                    isActive: widget.playlist.hasNext,
-                  ),
-                  // Fit mode
-                  _buildToolbarButton(
-                    label: _fitModeLabels[_fitMode]!,
-                    icon: _fitModeIcons[_fitMode],
-                    isActive: _fitMode != VideoFitMode.fit,
-                    onTap: _showFitModeSheet,
-                  ),
-                  // Speed
-                  _buildToolbarButton(
-                    label: '${_playbackSpeed}x',
-                    isActive: _playbackSpeed != 1.0,
-                    onTap: _showSpeedSheet,
-                  ),
-                  // Sleep timer
-                  _buildToolbarButton(
-                    label: widget.sleepTimer.isActive ? widget.sleepTimer.remainingFormatted : null,
-                    icon: Icons.alarm,
-                    isActive: widget.sleepTimer.isActive,
-                    onTap: _showSleepTimerSheet,
-                  ),
-                  const Spacer(),
-                  // Fullscreen
-                  _buildToolbarButton(
-                    icon: widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                    onTap: widget.onToggleFullscreen,
-                  ),
-                  // Playlist
-                  if (widget.playlist.items.length > 1)
-                    _buildToolbarButton(
-                      label: '${widget.playlist.currentIndex + 1}/${widget.playlist.items.length}',
-                      icon: Icons.playlist_play,
-                      onTap: _showPlaylistSheet,
+              child: widget.isFullscreen
+                  ? _buildToolbarRow(isFullscreen: true)
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: _buildToolbarRow(isFullscreen: false),
                     ),
-                ],
-              ),
             ),
           ],
         ),
