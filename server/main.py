@@ -464,6 +464,14 @@ async def upload_file(path: str, file: UploadFile = File(...), subdir: str = "",
     return UploadResponse(filename=file.filename, size=len(content))
 
 
+@app.post("/api/files/mkdir")
+def create_dir(path: str, name: str, user=Depends(get_current_user)):
+    if not config.is_path_allowed(path):
+        raise HTTPException(status_code=403, detail="Access denied")
+    target = os.path.join(path, name)
+    os.makedirs(target, exist_ok=True)
+    return {"ok": True}
+
 
 @app.post("/api/files/rename")
 def rename_file(path: str, new_name: str, user=Depends(get_current_user)):

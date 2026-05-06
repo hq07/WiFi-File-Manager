@@ -193,6 +193,12 @@ class ApiService {
         options: _authOptions);
   }
 
+  Future<void> createSubdir(String parentPath, String dirName) async {
+    await _dio.post('$_baseUrl/api/files/mkdir',
+        queryParameters: {'path': parentPath, 'name': dirName},
+        options: _authOptions);
+  }
+
   Future<void> toggleShareVisible(String id, bool visible) async {
     await _dio.patch('$_baseUrl/api/shares/$id',
         data: {'visible': visible}, options: _authOptions);
