@@ -11,6 +11,11 @@
       "id": "icloud01",
       "path": "/Users/hq/Library/Mobile Documents/com~apple~CloudDocs",
       "visible": true
+    },
+    {
+      "id": "12b16d4c",
+      "path": "/Users/hq/Downloads",
+      "visible": true
     }
   ],
   "uploads_dir": "/Users/hq/WiFi-Manager-Uploads"
