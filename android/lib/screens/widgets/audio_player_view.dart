@@ -147,6 +147,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   }
 
   void _disposeController() {
+    _saveCurrentPosition();
     _controller?.removeListener(_onAudioProgress);
     _controller?.dispose();
     _controller = null;
@@ -154,7 +155,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
 
   @override
   void dispose() {
-    _saveCurrentPosition();
     _positionUpdateTimer?.cancel();
     _disposeController();
     super.dispose();

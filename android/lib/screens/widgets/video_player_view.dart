@@ -181,6 +181,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   }
 
   void _disposeController() {
+    _saveCurrentPosition();
     _controller?.removeListener(_onVideoProgress);
     _controller?.dispose();
     _controller = null;
@@ -188,7 +189,6 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
 
   @override
   void dispose() {
-    _saveCurrentPosition();
     _positionUpdateTimer?.cancel();
     _disposeController();
     _hideControlsTimer?.cancel();

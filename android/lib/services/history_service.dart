@@ -47,7 +47,7 @@ class HistoryItem {
 class HistoryService {
   static const _key = 'play_history';
   static const _maxItems = 30;
-  late final SharedPreferences _prefs;
+  late SharedPreferences _prefs;
   ApiService? _api;
   Future<void> _writeQueue = Future.value();
   Timer? _syncTimer;
@@ -63,11 +63,17 @@ class HistoryService {
   }
 
   Future<void> _doSync() async {
-    if (_api == null || !_api!.isLoggedIn) return;
+    if (_api == null || !_api!.isLoggedIn) {
+      debugPrint('[HistorySync] SKIP: api=${_api != null} loggedIn=${_api?.isLoggedIn}');
+      return;
+    }
     try {
-      await _api!.postSyncHistory(getHistory().map((h) => h.toJson()).toList());
+      final data = getHistory().map((h) => h.toJson()).toList();
+      debugPrint('[HistorySync] POST ${data.length} items');
+      await _api!.postSyncHistory(data);
+      debugPrint('[HistorySync] POST OK');
     } catch (e) {
-      debugPrint('History sync failed: $e');
+      debugPrint('[HistorySync] POST FAILED: $e');
     }
   }
 
@@ -133,6 +139,7 @@ class HistoryService {
       ));
       if (history.length > _maxItems) history.removeRange(_maxItems, history.length);
       await _save(history);
+      _doSync();
       _scheduleSync();
     });
   }
@@ -167,6 +174,7 @@ class HistoryService {
         completed: true,
       );
       await _prefs.setString(_key, jsonEncode(history.map((h) => h.toJson()).toList()));
+      _doSync();
       _scheduleSync();
     });
   }
@@ -189,6 +197,7 @@ class HistoryService {
   Future<void> clearHistory() {
     return _enqueue(() async {
       await _prefs.remove(_key);
+      _doSync();
       _scheduleSync();
     });
   }

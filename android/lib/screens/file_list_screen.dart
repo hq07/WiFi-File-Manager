@@ -102,7 +102,10 @@ class _FileListScreenState extends State<FileListScreen> {
             directoryFiles: directoryFiles,
             historyService: widget.historyService,
             layoutPrefs: widget.layoutPrefs,
-            initialPositionMs: widget.historyService?.getEntry(filePath)?.lastPositionMs ?? 0,
+            initialPositionMs: () {
+              final entry = widget.historyService?.getEntry(filePath);
+              return (entry != null && !entry.completed) ? entry.lastPositionMs : 0;
+            }(),
           ),
         ),
       );
