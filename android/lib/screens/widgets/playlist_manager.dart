@@ -106,4 +106,32 @@ class PlaylistManager extends ChangeNotifier {
     _repeatMode = modes[(modes.indexOf(_repeatMode) + 1) % modes.length];
     notifyListeners();
   }
+
+  /// Cycle play mode: sequential → shuffle → single repeat
+  PlayMode get playMode {
+    if (_repeatMode == PlaylistRepeatMode.one) return PlayMode.single;
+    if (_shuffle) return PlayMode.shuffle;
+    return PlayMode.sequential;
+  }
+
+  void cyclePlayMode() {
+    switch (playMode) {
+      case PlayMode.sequential:
+        _shuffle = true;
+        _repeatMode = PlaylistRepeatMode.off;
+        _generateShuffleOrder();
+        break;
+      case PlayMode.shuffle:
+        _shuffle = false;
+        _repeatMode = PlaylistRepeatMode.one;
+        break;
+      case PlayMode.single:
+        _shuffle = false;
+        _repeatMode = PlaylistRepeatMode.off;
+        break;
+    }
+    notifyListeners();
+  }
 }
+
+enum PlayMode { sequential, shuffle, single }
