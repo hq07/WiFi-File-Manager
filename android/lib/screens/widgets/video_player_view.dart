@@ -23,6 +23,7 @@ class VideoPlayerView extends StatefulWidget {
   final VoidCallback onToggleFullscreen;
   final bool isFullscreen;
   final HistoryService? historyService;
+  final int initialPositionMs;
 
   const VideoPlayerView({
     super.key,
@@ -35,6 +36,7 @@ class VideoPlayerView extends StatefulWidget {
     required this.onToggleFullscreen,
     required this.isFullscreen,
     this.historyService,
+    this.initialPositionMs = 0,
   });
 
   @override
@@ -111,6 +113,9 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         setState(() {
           _isLoading = false;
         });
+        if (widget.initialPositionMs > 0) {
+          await _controller!.seekTo(Duration(milliseconds: widget.initialPositionMs));
+        }
         _controller!.play();
         _startHideControlsTimer();
         _startHistoryTracking();
@@ -650,10 +655,10 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
         ),
         // Top bar
         if (_showControls) _buildTopBar(isDark),
-        // Lock button
+        // Lock button (right side vertically centered)
         if (_locked || _showControls) _buildLockButton(),
-        // Bottom controls
-        if (_showControls) _buildBottomToolbar(isDark),
+        // Bottom controls (progress + toolbar as one block)
+        if (_showControls) _buildBottomControls(isDark),
         // Brightness overlay
         if (_showBrightnessOverlay) _buildSideOverlay(
           Icons.brightness_6,
@@ -714,191 +719,136 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     );
   }
 
-  // ---- Center controls (large play/pause/prev/next) ----
+  // ---- Bottom controls (progress + toolbar as one block) ----
 
-  Widget _buildCenterControls() {
-    final ctrl = _controller;
-    if (ctrl == null || !ctrl.value.isInitialized) return const SizedBox.shrink();
-
-    return Center(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Previous
-          _buildCircleButton(
-            icon: Icons.skip_previous,
-            size: 40,
-            enabled: widget.playlist.hasPrevious,
-            onTap: widget.playlist.hasPrevious
-                ? () {
-                    _disposeController();
-                    widget.playlist.previous();
-                    _initVideo();
-                  }
-                : null,
-          ),
-          const SizedBox(width: 32),
-          // Play/Pause — large
-          GestureDetector(
-            onTap: _togglePlayPause,
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: Colors.black45,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                ctrl.value.isPlaying ? Icons.pause : Icons.play_arrow,
-                color: Colors.white,
-                size: 40,
-              ),
-            ),
-          ),
-          const SizedBox(width: 32),
-          // Next
-          _buildCircleButton(
-            icon: Icons.skip_next,
-            size: 40,
-            enabled: widget.playlist.hasNext,
-            onTap: widget.playlist.hasNext
-                ? () {
-                    _disposeController();
-                    widget.playlist.next();
-                    _initVideo();
-                  }
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCircleButton({
-    required IconData icon,
-    required double size,
-    required bool enabled,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.black38,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: enabled ? Colors.white : Colors.white30, size: size),
-      ),
-    );
-  }
-
-  // ---- Progress area (progress bar + time + lock) ----
-
-  Widget _buildProgressArea(bool isDark) {
+  Widget _buildBottomControls(bool isDark) {
     final ctrl = _controller;
     if (ctrl == null || !ctrl.value.isInitialized) return const SizedBox.shrink();
 
     final position = ctrl.value.position;
     final duration = ctrl.value.duration;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: _locked ? MediaQuery.of(context).padding.bottom : 48 + MediaQuery.of(context).padding.bottom,
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [Colors.black54, Colors.transparent],
-          ),
-        ),
-        padding: const EdgeInsets.only(left: 12, right: 12, top: 12, bottom: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Progress bar
-            VideoProgressIndicator(
-              ctrl,
-              allowScrubbing: true,
-              colors: const VideoProgressColors(
-                playedColor: Color(0xFF6C63FF),
-                bufferedColor: Colors.white30,
-                backgroundColor: Colors.white24,
-              ),
-            ),
-            const SizedBox(height: 4),
-            // Time + lock
-            Row(
-              children: [
-                Text(
-                  formatDuration(position),
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
-                const Spacer(),
-                Text(
-                  formatDuration(duration),
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ---- Bottom toolbar (fit, speed, timer, fullscreen, playlist) ----
-
-  Widget _buildBottomToolbar(bool isDark) {
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
       child: Container(
-        color: Colors.black54,
-        padding: EdgeInsets.only(
-          left: 8,
-          right: 8,
-          bottom: MediaQuery.of(context).padding.bottom,
-          top: 4,
-        ),
-        child: Row(
+        color: const Color(0xA6000000), // rgba(0,0,0,0.65)
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Fit mode
-            _buildToolbarButton(
-              label: _fitModeLabels[_fitMode]!,
-              icon: _fitModeIcons[_fitMode],
-              isActive: _fitMode != VideoFitMode.fit,
-              onTap: _showFitModeSheet,
-            ),
-            // Speed
-            _buildToolbarButton(
-              label: '${_playbackSpeed}x',
-              isActive: _playbackSpeed != 1.0,
-              onTap: _showSpeedSheet,
-            ),
-            // Sleep timer
-            _buildToolbarButton(
-              label: widget.sleepTimer.isActive ? widget.sleepTimer.remainingFormatted : null,
-              icon: Icons.alarm,
-              isActive: widget.sleepTimer.isActive,
-              onTap: _showSleepTimerSheet,
-            ),
-            const Spacer(),
-            // Playlist
-            if (widget.playlist.items.length > 1)
-              _buildToolbarButton(
-                label: '${widget.playlist.currentIndex + 1}/${widget.playlist.items.length}',
-                icon: Icons.playlist_play,
-                onTap: _showPlaylistSheet,
+            // Progress bar area
+            Padding(
+              padding: EdgeInsets.only(left: 16, right: 16, top: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Current time at top-left
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        formatDuration(position),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Progress bar
+                  VideoProgressIndicator(
+                    ctrl,
+                    allowScrubbing: true,
+                    colors: const VideoProgressColors(
+                      playedColor: Color(0xFF6C63FF),
+                      bufferedColor: Colors.white30,
+                      backgroundColor: Colors.white24,
+                    ),
+                  ),
+                ],
               ),
-            // Fullscreen
-            _buildToolbarButton(
-              icon: widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-              onTap: widget.onToggleFullscreen,
+            ),
+            // Toolbar row
+            Padding(
+              padding: EdgeInsets.only(
+                left: 4,
+                right: 8,
+                top: 2,
+                bottom: bottomPadding + 4,
+              ),
+              child: Row(
+                children: [
+                  // Prev
+                  _buildToolbarButton(
+                    icon: Icons.skip_previous,
+                    onTap: widget.playlist.hasPrevious
+                        ? () {
+                            _saveCurrentPosition();
+                            _disposeController();
+                            widget.playlist.previous();
+                            _initVideo();
+                          }
+                        : null,
+                    isActive: widget.playlist.hasPrevious,
+                  ),
+                  // Play/Pause
+                  _buildToolbarButton(
+                    icon: ctrl.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                    iconSize: 32,
+                    onTap: _togglePlayPause,
+                  ),
+                  // Next
+                  _buildToolbarButton(
+                    icon: Icons.skip_next,
+                    onTap: widget.playlist.hasNext
+                        ? () {
+                            _saveCurrentPosition();
+                            _disposeController();
+                            widget.playlist.next();
+                            _initVideo();
+                          }
+                        : null,
+                    isActive: widget.playlist.hasNext,
+                  ),
+                  // Fit mode
+                  _buildToolbarButton(
+                    label: _fitModeLabels[_fitMode]!,
+                    icon: _fitModeIcons[_fitMode],
+                    isActive: _fitMode != VideoFitMode.fit,
+                    onTap: _showFitModeSheet,
+                  ),
+                  // Speed
+                  _buildToolbarButton(
+                    label: '${_playbackSpeed}x',
+                    isActive: _playbackSpeed != 1.0,
+                    onTap: _showSpeedSheet,
+                  ),
+                  // Sleep timer
+                  _buildToolbarButton(
+                    label: widget.sleepTimer.isActive ? widget.sleepTimer.remainingFormatted : null,
+                    icon: Icons.alarm,
+                    isActive: widget.sleepTimer.isActive,
+                    onTap: _showSleepTimerSheet,
+                  ),
+                  const Spacer(),
+                  // Fullscreen
+                  _buildToolbarButton(
+                    icon: widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                    onTap: widget.onToggleFullscreen,
+                  ),
+                  // Playlist
+                  if (widget.playlist.items.length > 1)
+                    _buildToolbarButton(
+                      label: '${widget.playlist.currentIndex + 1}/${widget.playlist.items.length}',
+                      icon: Icons.playlist_play,
+                      onTap: _showPlaylistSheet,
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -909,9 +859,13 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   Widget _buildToolbarButton({
     String? label,
     IconData? icon,
+    double iconSize = 18,
     bool isActive = false,
     VoidCallback? onTap,
   }) {
+    final color = onTap == null
+        ? Colors.white24
+        : (isActive ? const Color(0xFF6C63FF) : Colors.white70);
     return GestureDetector(
       onTap: onTap,
       child: Padding(
@@ -920,13 +874,13 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null)
-              Icon(icon, color: isActive ? const Color(0xFF6C63FF) : Colors.white70, size: 18),
+              Icon(icon, color: color, size: iconSize),
             if (label != null) ...[
               if (icon != null) const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
-                  color: isActive ? const Color(0xFF6C63FF) : Colors.white70,
+                  color: color,
                   fontSize: 13,
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                 ),
@@ -1017,8 +971,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
 
   Widget _buildLockButton() {
     return Positioned(
-      left: 12,
-      bottom: 48 + MediaQuery.of(context).padding.bottom + 16,
+      right: 14,
+      top: MediaQuery.of(context).size.height * 0.5 - 22,
       child: GestureDetector(
         onTap: () {
           setState(() {
@@ -1036,19 +990,17 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Colors.black38,
-            borderRadius: BorderRadius.circular(20),
+            shape: BoxShape.circle,
           ),
           child: Icon(
             _locked ? Icons.lock : Icons.lock_open,
             color: Colors.white70,
-            size: 20,
+            size: 18,
           ),
         ),
       ),
     );
   }
-
-  void _resetHideControlsTimer() => _startHideControlsTimer();
 
   // ---- Side overlay (brightness / volume) ----
 
