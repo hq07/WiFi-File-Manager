@@ -120,6 +120,8 @@ class _SearchScreenState extends State<SearchScreen> {
         'name': r['name'],
         'size': r['size'],
         'path': r['path'],
+        if (r.containsKey('display_aspect_ratio'))
+          'display_aspect_ratio': r['display_aspect_ratio'],
       }).toList();
       // Find initial position from history
       final historyItem = widget.historyService.getEntry(path);

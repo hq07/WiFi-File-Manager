@@ -90,6 +90,8 @@ class _FileListScreenState extends State<FileListScreen> {
                 'name': f['name'] as String,
                 'size': f['size'] as int,
                 'path': '$_currentPath/${f['name']}',
+                if (f.containsKey('display_aspect_ratio'))
+                  'display_aspect_ratio': f['display_aspect_ratio'],
               })
           .toList();
       Navigator.push(

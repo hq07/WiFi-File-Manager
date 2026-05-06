@@ -57,6 +57,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   Timer? _hideControlsTimer;
   Timer? _hideOverlayTimer;
   Timer? _positionUpdateTimer;
+  double? _serverDar;
 
   // Gesture overlay state
   OverlayEntry? _gestureOverlay;
@@ -102,8 +103,18 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     setState(() {
       _isLoading = true;
       _hasError = false;
+      _serverDar = null;
     });
     try {
+      // Fetch display_aspect_ratio from server if not in playlist item
+      final itemDar = widget.playlist.currentItem['display_aspect_ratio'];
+      if (itemDar is num && itemDar > 0) {
+        _serverDar = itemDar.toDouble();
+      } else {
+        final meta = await widget.api.getFileMetadata(widget.filePath);
+        final dar = meta?['display_aspect_ratio'];
+        if (dar is num && dar > 0) _serverDar = dar.toDouble();
+      }
       final url = widget.api.getPreviewUrl(widget.filePath);
       _controller = VideoPlayerController.networkUrl(Uri.parse(url));
       await _controller!.initialize();
@@ -498,9 +509,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   // ---- Video fit mode ----
 
   double get _displayAspectRatio {
-    // Use server-provided DAR (accounts for SAR), fall back to pixel ratio
-    final dar = widget.playlist.currentItem['display_aspect_ratio'];
-    if (dar is num && dar > 0) return dar.toDouble();
+    if (_serverDar != null && _serverDar! > 0) return _serverDar!;
     return _controller!.value.aspectRatio;
   }
 
