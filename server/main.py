@@ -32,6 +32,13 @@ THUMB_CACHE_DIR = os.path.join(os.path.dirname(__file__), "data", "thumb_cache")
 UF_OFFLINE = 0x00001000
 
 
+import threading
+
+# Track in-progress thumbnail generation to avoid duplicate work
+_thumb_in_progress: set[str] = set()
+_thumb_lock = threading.Lock()
+
+
 def _thumb_path(path: str) -> str:
     """Return cached thumbnail path for a given file."""
     os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
@@ -39,42 +46,63 @@ def _thumb_path(path: str) -> str:
     return os.path.join(THUMB_CACHE_DIR, f"{h}.jpg")
 
 
-def _generate_thumbnail(path: str, max_size: int = 320) -> str | None:
-    """Generate a thumbnail image and return its path. Returns None on failure.
-    Uses ffmpeg for videos, sips on macOS for images, PIL as fallback."""
+def _generate_thumbnail_bg(path: str, max_size: int = 320) -> None:
+    """Generate thumbnail in background thread. Writes atomically to avoid corrupt files."""
     cache = _thumb_path(path)
-    if os.path.exists(cache):
-        return cache
+    tmp = cache + ".tmp"
     ext = os.path.splitext(path)[1].lower()
     video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv'}
     image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.heic'}
     try:
         if ext in video_exts:
             subprocess.run(
-                ['ffmpeg', '-y', '-i', path, '-vf', f'scale={max_size}:{max_size}:force_original_aspect_ratio=decrease',
-                 '-vframes', '1', '-q:v', '5', '-f', 'mjpeg', cache],
-                capture_output=True, timeout=15, check=True)
+                ['ffmpeg', '-y', '-i', path, '-ss', '00:00:01',
+                 '-vf', f'scale={max_size}:{max_size}:force_original_aspect_ratio=decrease',
+                 '-vframes', '1', '-q:v', '5', '-f', 'mjpeg', tmp],
+                capture_output=True, timeout=30)
         elif ext in image_exts:
             if _sys.platform == 'darwin':
                 subprocess.run(
                     ['sips', '-Z', str(max_size), '--setProperty', 'format', 'jpeg',
-                     path, '--out', cache], capture_output=True, timeout=10, check=True)
+                     path, '--out', tmp], capture_output=True, timeout=10)
             else:
                 try:
                     from PIL import Image
                     img = Image.open(path)
                     img.thumbnail((max_size, max_size))
-                    img.convert('RGB').save(cache, 'JPEG', quality=75)
+                    img.convert('RGB').save(tmp, 'JPEG', quality=75)
                 except ImportError:
                     subprocess.run(
-                        ['ffmpeg', '-y', '-i', path, '-vf', f'scale={max_size}:{max_size}:force_original_aspect_ratio=decrease',
-                         '-vframes', '1', '-q:v', '5', '-f', 'mjpeg', cache],
-                        capture_output=True, timeout=15, check=True)
+                        ['ffmpeg', '-y', '-i', path,
+                         '-vf', f'scale={max_size}:{max_size}:force_original_aspect_ratio=decrease',
+                         '-vframes', '1', '-q:v', '5', '-f', 'mjpeg', tmp],
+                        capture_output=True, timeout=30)
         else:
-            return None
-        return cache if os.path.exists(cache) else None
+            return
+        # Atomic rename only if file was actually created
+        if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+            os.replace(tmp, cache)
+        elif os.path.exists(tmp):
+            os.remove(tmp)
     except Exception:
-        return None
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    finally:
+        with _thumb_lock:
+            _thumb_in_progress.discard(path)
+
+
+def _request_thumbnail(path: str) -> str | None:
+    """Check cache or kick off background generation. Returns cached path or None."""
+    cache = _thumb_path(path)
+    if os.path.exists(cache) and os.path.getsize(cache) > 0:
+        return cache
+    # Start background generation if not already in progress
+    with _thumb_lock:
+        if path not in _thumb_in_progress:
+            _thumb_in_progress.add(path)
+            threading.Thread(target=_generate_thumbnail_bg, args=(path,), daemon=True).start()
+    return None
 
 
 def _is_evicted(path: str) -> bool:
@@ -458,7 +486,7 @@ def preview_file(path: str, request: Request, thumbnail: bool = False, user=Depe
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="File not found")
     if thumbnail:
-        thumb = _generate_thumbnail(path)
+        thumb = _request_thumbnail(path)
         if thumb:
             return FileResponse(thumb, media_type="image/jpeg",
                                 headers={"Cache-Control": "public, max-age=86400"})
