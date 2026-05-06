@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/api_service.dart';
+import '../services/history_service.dart';
+import '../services/layout_prefs.dart';
 import 'widgets/sleep_timer_manager.dart';
 import 'widgets/playlist_manager.dart';
 import 'widgets/video_player_view.dart';
@@ -28,6 +30,9 @@ class MediaPlayerScreen extends StatefulWidget {
   final String filePath;
   final String fileName;
   final List<Map<String, dynamic>> directoryFiles;
+  final HistoryService? historyService;
+  final LayoutPrefs? layoutPrefs;
+  final int initialPositionMs;
 
   const MediaPlayerScreen({
     super.key,
@@ -35,6 +40,9 @@ class MediaPlayerScreen extends StatefulWidget {
     required this.filePath,
     required this.fileName,
     required this.directoryFiles,
+    this.historyService,
+    this.layoutPrefs,
+    this.initialPositionMs = 0,
   });
 
   @override

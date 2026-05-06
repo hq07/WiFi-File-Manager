@@ -1,13 +1,32 @@
 // android/lib/screens/settings_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/layout_prefs.dart';
+import '../services/history_service.dart';
+import '../services/favorites_service.dart';
+import '../utils/format_utils.dart';
 import 'browse_screen.dart';
+import 'trash_screen.dart';
+import 'login_screen.dart';
+import 'widgets/preview_image.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ApiService api;
   final LayoutPrefs layoutPrefs;
-  const SettingsScreen({super.key, required this.api, required this.layoutPrefs});
+  final HistoryService historyService;
+  final FavoritesService favoritesService;
+  final SharedPreferences prefs;
+  const SettingsScreen({
+    super.key,
+    required this.api,
+    required this.layoutPrefs,
+    required this.historyService,
+    required this.favoritesService,
+    required this.prefs,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -16,11 +35,15 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   List<dynamic> _shares = [];
   bool _loading = true;
+  int _serverCacheCount = 0;
+  int _serverCacheSize = 0;
+  int _localCacheSize = 0;
 
   @override
   void initState() {
     super.initState();
     _loadShares();
+    _loadCacheInfo();
   }
 
   Future<void> _loadShares() async {
@@ -36,6 +59,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('加载失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadCacheInfo() async {
+    try {
+      final info = await widget.api.getCacheInfo();
+      final localDir = await _getLocalCacheDir();
+      int localSize = 0;
+      if (await localDir.exists()) {
+        await for (final f in localDir.list()) {
+          if (f is File) localSize += await f.length();
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _serverCacheCount = info['count'] ?? 0;
+          _serverCacheSize = info['size'] ?? 0;
+          _localCacheSize = localSize;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<Directory> _getLocalCacheDir() async {
+    final dir = await getTemporaryDirectory();
+    return Directory('${dir.path}/preview_cache');
+  }
+
+  Future<void> _clearCache() async {
+    try {
+      await widget.api.clearServerCache();
+      final localDir = await _getLocalCacheDir();
+      if (await localDir.exists()) {
+        await for (final f in localDir.list()) {
+          if (f is File) await f.delete();
+        }
+      }
+      PreviewImage.clearMemCache();
+      setState(() {
+        _serverCacheCount = 0;
+        _serverCacheSize = 0;
+        _localCacheSize = 0;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('缓存已清除')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('清除失败: $e')),
         );
       }
     }
@@ -188,6 +265,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onChanged: (v) => setState(() => widget.layoutPrefs.showResolution = v),
                   ),
                   const Divider(),
+                  // 缓存管理
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text('缓存管理', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.storage),
+                    title: const Text('缩略图缓存'),
+                    subtitle: Text(
+                      '服务端: ${_serverCacheCount} 个 (${formatSize(_serverCacheSize)})\n'
+                      '本地: ${formatSize(_localCacheSize)}',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: (_serverCacheCount > 0 || _localCacheSize > 0) ? _clearCache : null,
+                        icon: const Icon(Icons.delete_sweep),
+                        label: const Text('清除缓存'),
+                      ),
+                    ),
+                  ),
+                  const Divider(),
+                  // 废纸篓入口
+                  ListTile(
+                    leading: const Icon(Icons.delete_outline, color: Colors.red),
+                    title: const Text('废纸篓'),
+                    subtitle: const Text('查看和管理已删除的文件'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => TrashScreen(api: widget.api)),
+                    ),
+                  ),
+                  const Divider(),
                   // 共享文件夹
                   if (_shares.isEmpty)
                     const Center(child: Padding(
@@ -216,6 +329,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       );
                     }),
+                  const Divider(),
+                  // 退出登录
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.logout, color: Colors.red),
+                        label: const Text('退出登录', style: TextStyle(color: Colors.red, fontSize: 16)),
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('退出登录'),
+                              content: const Text('确定要退出登录吗？'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('确定', style: TextStyle(color: Colors.red)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            widget.api.clearToken();
+                            if (mounted) {
+                              Navigator.of(context).popUntil((route) => route.isFirst);
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

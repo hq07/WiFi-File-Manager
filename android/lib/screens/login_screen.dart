@@ -1,12 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/layout_prefs.dart';
+import '../services/history_service.dart';
+import '../services/favorites_service.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final ApiService api;
   final LayoutPrefs layoutPrefs;
-  const LoginScreen({super.key, required this.api, required this.layoutPrefs});
+  final HistoryService historyService;
+  final FavoritesService favoritesService;
+  final SharedPreferences prefs;
+  const LoginScreen({
+    super.key,
+    required this.api,
+    required this.layoutPrefs,
+    required this.historyService,
+    required this.favoritesService,
+    required this.prefs,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -46,18 +59,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _login() async {
     setState(() { _loading = true; _error = null; });
-    await widget.api.setServer(_ipCtrl.text, _portCtrl.text);
-    final ok = await widget.api.login(_userCtrl.text, _passCtrl.text);
-    if (ok) {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => HomeScreen(api: widget.api, layoutPrefs: widget.layoutPrefs)),
-      );
-    } else {
-      setState(() { _error = 'Login failed. Check IP, port, and password.'; });
+    try {
+      await widget.api.setServer(_ipCtrl.text, _portCtrl.text);
+      final ok = await widget.api.login(_userCtrl.text, _passCtrl.text);
+      if (ok) {
+        // Init services in background, don't block navigation
+        widget.historyService.init(widget.prefs, api: widget.api);
+        widget.favoritesService.init(widget.prefs, api: widget.api);
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => HomeScreen(
+              api: widget.api,
+              layoutPrefs: widget.layoutPrefs,
+              historyService: widget.historyService,
+              favoritesService: widget.favoritesService,
+              prefs: widget.prefs,
+            ),
+          ),
+        );
+        // Sync after navigation (non-blocking)
+        try {
+          await widget.historyService.syncFromServer();
+          await widget.favoritesService.syncFromServer();
+        } catch (_) {}
+      } else {
+        setState(() { _error = 'Login failed. Check IP, port, and password.'; });
+      }
+    } catch (e) {
+      setState(() { _error = 'Login error: $e'; });
     }
-    setState(() { _loading = false; });
+    if (mounted) setState(() { _loading = false; });
   }
 
   @override

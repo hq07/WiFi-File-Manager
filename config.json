@@ -1,10 +1,17 @@
 {
-  "port": 8000,
-  "password_hash": "$2b$12$M8oLTHNpu.slAz9Z3..jL.FKuD4wveuS6wow7BMxO9rPa56r6ELSy",
+  "port": 7777,
+  "password_hash": "$2b$12$9/D5APG8tHPGwVhVh8U5MeJcVGgnu10h9bw6ARhDJv2SB1k57n2nq",
   "shared_dirs": [
     {
-      "id": "aad5a288",
-      "path": "/var/folders/ww/b1s32gyx5gj1vmcr30tb30540000gn/T/tmp6fyfpo5o"
+      "id": "a8fd5b45",
+      "path": "/Users/hq/WiFi-Manager-Uploads",
+      "visible": true
+    },
+    {
+      "id": "icloud01",
+      "path": "/Users/hq/Library/Mobile Documents/com~apple~CloudDocs",
+      "visible": true
     }
-  ]
+  ],
+  "uploads_dir": "/Users/hq/WiFi-Manager-Uploads"
 }

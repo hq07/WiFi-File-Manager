@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import uuid
 from passlib.context import CryptContext
 
@@ -7,12 +8,13 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 DEFAULT_UPLOADS_DIR = os.path.join(os.path.expanduser("~"), "WiFi-Manager-Uploads")
+_DEFAULT_CONFIG = "config.win.json" if sys.platform == "win32" else "config.json"
 
 
 class Config:
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = _DEFAULT_CONFIG):
         self.config_path = config_path
-        self.port: int = 8000
+        self.port: int = 7777
         self.password_hash: str | None = None
         self.shared_dirs: list[dict] = []
         self.uploads_dir: str = DEFAULT_UPLOADS_DIR
@@ -23,7 +25,7 @@ class Config:
         if os.path.exists(self.config_path):
             with open(self.config_path, "r") as f:
                 data = json.load(f)
-            self.port = data.get("port", 8000)
+            self.port = data.get("port", 7777)
             self.password_hash = data.get("password_hash")
             self.shared_dirs = data.get("shared_dirs", [])
             self.uploads_dir = data.get("uploads_dir", DEFAULT_UPLOADS_DIR)
@@ -87,8 +89,16 @@ class Config:
         return False
 
     def is_path_allowed(self, path: str) -> bool:
-        """Check if path is within any shared directory."""
+        """Check if path is within any shared directory or under external drives."""
         path = os.path.abspath(path)
+        if path == "/":
+            return True
+        # Always allow external disks
+        if sys.platform == "win32":
+            if len(path) >= 2 and path[1] == ':':
+                return True
+        elif path.startswith("/Volumes/"):
+            return True
         for d in self.shared_dirs:
             shared = os.path.abspath(d["path"])
             if path == shared or path.startswith(shared + os.sep):

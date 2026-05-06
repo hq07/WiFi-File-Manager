@@ -1,6 +1,7 @@
 # server/file_manager.py
 import os
 import platform
+import shutil
 import subprocess
 import json
 from datetime import datetime, timezone
@@ -43,7 +44,10 @@ def list_files(directory: str) -> list[dict]:
     items = []
     for name in sorted(os.listdir(directory)):
         full_path = os.path.join(directory, name)
-        stat = os.stat(full_path)
+        try:
+            stat = os.stat(full_path)
+        except OSError:
+            continue
         item = {
             "name": name,
             "type": "folder" if os.path.isdir(full_path) else "file",
@@ -59,6 +63,17 @@ def list_files(directory: str) -> list[dict]:
     return items
 
 
+def get_file_metadata(directory: str, filename: str) -> dict | None:
+    """Get media metadata for a single file. Returns None if not applicable."""
+    full_path = os.path.join(directory, filename)
+    if not os.path.isfile(full_path):
+        return None
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in MEDIA_EXTS:
+        return None
+    return _get_media_metadata(full_path, ext)
+
+
 def validate_path(shared_dir: str, requested_path: str) -> bool:
     """Check that requested_path is within shared_dir (no traversal)."""
     shared_dir = os.path.abspath(shared_dir)
@@ -69,6 +84,18 @@ def validate_path(shared_dir: str, requested_path: str) -> bool:
 def detect_disks() -> list[dict]:
     disks = []
     if platform.system() == "Darwin":
+        # System disk (Macintosh HD)
+        try:
+            stat = os.statvfs("/")
+            disks.append({
+                "name": "Macintosh HD",
+                "path": "/",
+                "total": stat.f_blocks * stat.f_frsize,
+                "free": stat.f_bavail * stat.f_frsize,
+            })
+        except OSError:
+            pass
+        # External volumes
         volumes_dir = "/Volumes"
         if os.path.isdir(volumes_dir):
             for name in os.listdir(volumes_dir):
@@ -82,6 +109,16 @@ def detect_disks() -> list[dict]:
                         "free": stat.f_bavail * stat.f_frsize,
                     })
     elif platform.system() == "Linux":
+        try:
+            stat = os.statvfs("/")
+            disks.append({
+                "name": "System Disk",
+                "path": "/",
+                "total": stat.f_blocks * stat.f_frsize,
+                "free": stat.f_bavail * stat.f_frsize,
+            })
+        except OSError:
+            pass
         media_dir = f"/media/{os.getenv('USER', 'root')}"
         if os.path.isdir(media_dir):
             for name in os.listdir(media_dir):
@@ -99,15 +136,14 @@ def detect_disks() -> list[dict]:
         for letter in string.ascii_uppercase:
             drive = f"{letter}:\\"
             if os.path.exists(drive):
-                import shutil
-                total, free = shutil.disk_usage(drive)
-                if letter != "C":
-                    disks.append({
-                        "name": f"Drive {letter}:",
-                        "path": drive,
-                        "total": total,
-                        "free": free,
-                    })
+                usage = shutil.disk_usage(drive)
+                total, free = usage.total, usage.free
+                disks.append({
+                    "name": f"Drive {letter}:",
+                    "path": drive,
+                    "total": total,
+                    "free": free,
+                })
     return disks
 
 
