@@ -4,6 +4,7 @@ import 'services/api_service.dart';
 import 'services/layout_prefs.dart';
 import 'services/history_service.dart';
 import 'services/favorites_service.dart';
+import 'services/audio_handler.dart';
 import 'screens/login_screen.dart';
 
 void main() async {
@@ -15,6 +16,7 @@ void main() async {
   await historyService.init(prefs);
   final favoritesService = FavoritesService();
   await favoritesService.init(prefs);
+  audioPlayerService = await AudioPlayerService.create();
   runApp(MyApp(
     layoutPrefs: layoutPrefs,
     historyService: historyService,

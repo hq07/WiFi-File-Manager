@@ -34,6 +34,15 @@ def _get_media_metadata(path: str, ext: str) -> dict:
                 for stream in info.get('streams', []):
                     if stream.get('codec_type') == 'video' and 'width' in stream:
                         meta['resolution'] = f"{stream['width']}x{stream['height']}"
+                        # Compute correct display aspect ratio using SAR
+                        sar_str = stream.get('sample_aspect_ratio', '1:1')
+                        try:
+                            sar_w, sar_h = [int(x) for x in sar_str.split(':')]
+                        except (ValueError, AttributeError):
+                            sar_w, sar_h = 1, 1
+                        if sar_w > 0 and sar_h > 0:
+                            dar = (stream['width'] * sar_w) / (stream['height'] * sar_h)
+                            meta['display_aspect_ratio'] = round(dar, 6)
                         break
     except Exception:
         pass

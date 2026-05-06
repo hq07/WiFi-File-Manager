@@ -7,6 +7,8 @@ class PlaybackStateNotifier extends ChangeNotifier {
   List<Map<String, dynamic>> _directoryFiles = [];
   bool _isPlaying = false;
   bool _wasPlayingBeforePause = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
 
   String? get filePath => _filePath;
   String? get fileName => _fileName;
@@ -15,6 +17,8 @@ class PlaybackStateNotifier extends ChangeNotifier {
   bool get isPlaying => _isPlaying;
   bool get isActive => _filePath != null;
   bool get wasPlayingBeforePause => _wasPlayingBeforePause;
+  Duration get position => _position;
+  Duration get duration => _duration;
 
   void updatePlaying({
     required String filePath,
@@ -38,6 +42,16 @@ class PlaybackStateNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setPosition(Duration pos) {
+    _position = pos;
+    notifyListeners();
+  }
+
+  void setDuration(Duration dur) {
+    _duration = dur;
+    notifyListeners();
+  }
+
   void clear() {
     _filePath = null;
     _fileName = null;
@@ -45,6 +59,8 @@ class PlaybackStateNotifier extends ChangeNotifier {
     _directoryFiles = [];
     _isPlaying = false;
     _wasPlayingBeforePause = false;
+    _position = Duration.zero;
+    _duration = Duration.zero;
     notifyListeners();
   }
 }
