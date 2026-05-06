@@ -580,16 +580,24 @@ def _start_udp_discovery(port: int):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if hasattr(socket, 'SO_REUSEPORT'):
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             sock.bind(("0.0.0.0", port))
+            print(f"  UDP discovery listening on 0.0.0.0:{port}")
             while True:
-                data, addr = sock.recvfrom(1024)
-                if data.strip() == b"WFM_DISCOVER":
-                    ip = get_local_ip()
-                    resp = f"WFM_HERE|{ip}|{port}".encode()
-                    sock.sendto(resp, addr)
+                try:
+                    data, addr = sock.recvfrom(1024)
+                    msg = data.strip()
+                    if msg == b"WFM_DISCOVER":
+                        ip = get_local_ip()
+                        resp = f"WFM_HERE|{ip}|{port}".encode()
+                        sock.sendto(resp, addr)
+                        print(f"  UDP discovery: {addr[0]} -> responded with {ip}")
+                except Exception as e:
+                    print(f"  UDP discovery recv/send error: {e}")
         except Exception as e:
-            print(f"UDP discovery listener error: {e}")
+            print(f"  UDP discovery listener failed to start: {e}")
 
     t = threading.Thread(target=_listen, daemon=True)
     t.start()
