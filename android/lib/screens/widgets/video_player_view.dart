@@ -557,6 +557,11 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     VideoFitMode.original: Icons.photo_size_select_actual,
   };
 
+  void _cycleFitMode() {
+    final next = VideoFitMode.values[(_fitMode.index + 1) % VideoFitMode.values.length];
+    setState(() => _fitMode = next);
+  }
+
   void _showFitModeSheet() {
     showModalBottomSheet(
       context: context,
@@ -743,7 +748,13 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       right: 0,
       bottom: 0,
       child: Container(
-        color: const Color(0xA6000000), // rgba(0,0,0,0.65)
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [Color(0xE6000000), Color(0x00000000)],
+          ),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -769,14 +780,11 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
                     ),
                   ),
                   // Progress bar
-                  VideoProgressIndicator(
-                    ctrl,
-                    allowScrubbing: true,
-                    colors: const VideoProgressColors(
-                      playedColor: Color(0xFF6C63FF),
-                      bufferedColor: Colors.white30,
-                      backgroundColor: Colors.white24,
-                    ),
+                  _ProgressBar(
+                    controller: ctrl,
+                    playedColor: const Color(0xFF6C63FF),
+                    bufferedColor: Colors.white30,
+                    backgroundColor: Colors.white24,
                   ),
                 ],
               ),
@@ -839,7 +847,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
           label: isFullscreen ? _fitModeLabels[_fitMode]! : null,
           icon: _fitModeIcons[_fitMode],
           isActive: _fitMode != VideoFitMode.fit,
-          onTap: _showFitModeSheet,
+          onTap: _cycleFitMode,
         ),
         _buildToolbarButton(
           label: '${_playbackSpeed}x',
@@ -1081,6 +1089,143 @@ class _GestureAnimationOverlay extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ProgressBar extends StatefulWidget {
+  final VideoPlayerController controller;
+  final Color playedColor;
+  final Color bufferedColor;
+  final Color backgroundColor;
+
+  const _ProgressBar({
+    required this.controller,
+    required this.playedColor,
+    required this.bufferedColor,
+    required this.backgroundColor,
+  });
+
+  @override
+  State<_ProgressBar> createState() => _ProgressBarState();
+}
+
+class _ProgressBarState extends State<_ProgressBar> {
+  bool _dragging = false;
+  double _dragValue = 0;
+
+  VideoPlayerValue get _value => widget.controller.value;
+
+  void _onDragStart(DragStartDetails details) {
+    setState(() => _dragging = true);
+  }
+
+  void _onDragUpdate(DragUpdateDetails details, BoxConstraints constraints) {
+    final fraction = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+    setState(() => _dragValue = fraction);
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final position = _value.duration * _dragValue;
+    widget.controller.seekTo(position);
+    setState(() => _dragging = false);
+  }
+
+  void _onTapDown(TapDownDetails details, BoxConstraints constraints) {
+    final fraction = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+    widget.controller.seekTo(_value.duration * fraction);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final duration = _value.duration;
+        final position = _value.position;
+        final buffered = _value.buffered.isNotEmpty
+            ? _value.buffered.last.end
+            : Duration.zero;
+
+        final playedFraction = _dragging
+            ? _dragValue
+            : (duration.inMilliseconds > 0
+                ? position.inMilliseconds / duration.inMilliseconds
+                : 0.0).clamp(0.0, 1.0);
+        final bufferedFraction = duration.inMilliseconds > 0
+            ? buffered.inMilliseconds / duration.inMilliseconds
+            : 0.0;
+
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTapDown: (d) => _onTapDown(d, constraints),
+          onHorizontalDragStart: _onDragStart,
+          onHorizontalDragUpdate: (d) => _onDragUpdate(d, constraints),
+          onHorizontalDragEnd: _onDragEnd,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: SizedBox(
+              height: 16,
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  // Background
+                  Container(
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: widget.backgroundColor,
+                      borderRadius: BorderRadius.circular(1.5),
+                    ),
+                  ),
+                  // Buffered
+                  FractionallySizedBox(
+                    widthFactor: bufferedFraction,
+                    child: Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: widget.bufferedColor,
+                        borderRadius: BorderRadius.circular(1.5),
+                      ),
+                    ),
+                  ),
+                  // Played
+                  FractionallySizedBox(
+                    widthFactor: playedFraction,
+                    child: Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: widget.playedColor,
+                        borderRadius: BorderRadius.circular(1.5),
+                      ),
+                    ),
+                  ),
+                  // Dot thumb
+                  FractionallySizedBox(
+                    widthFactor: playedFraction,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        width: _dragging ? 16 : 12,
+                        height: _dragging ? 16 : 12,
+                        decoration: BoxDecoration(
+                          color: widget.playedColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 4,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -22,7 +22,7 @@ from server.models import (
 from server.file_manager import list_files, get_file_metadata, validate_path, detect_disks, get_content_type
 
 config = Config()
-app = FastAPI(title="WiFi File Manager")
+app = FastAPI(title="WiFi File Manager", version="2.0")
 security = HTTPBearer()
 
 CHUNK_SIZE = 64 * 1024  # 64 KB
