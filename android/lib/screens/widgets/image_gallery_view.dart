@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import '../../services/api_service.dart';
+import '../../services/history_service.dart';
 import 'media_info_panel.dart';
 import 'playlist_manager.dart';
 
@@ -12,6 +13,7 @@ class ImageGalleryView extends StatefulWidget {
   final String fileName;
   final int? fileSize;
   final PlaylistManager playlist;
+  final HistoryService? historyService;
 
   const ImageGalleryView({
     super.key,
@@ -20,6 +22,7 @@ class ImageGalleryView extends StatefulWidget {
     required this.fileName,
     this.fileSize,
     required this.playlist,
+    this.historyService,
   });
 
   @override
@@ -41,6 +44,19 @@ class _ImageGalleryViewState extends State<ImageGalleryView> {
       initialPage: widget.playlist.currentIndex,
     );
     _startHideControlsTimer();
+    _recordHistory();
+  }
+
+  void _recordHistory() {
+    final hs = widget.historyService;
+    if (hs == null) return;
+    final item = widget.playlist.currentItem;
+    hs.addEntry(
+      name: item['name'] ?? widget.fileName,
+      path: widget.filePath,
+      dirPath: widget.filePath.substring(0, widget.filePath.lastIndexOf('/')),
+      size: item['size'] as int? ?? widget.fileSize ?? 0,
+    );
   }
 
   @override
