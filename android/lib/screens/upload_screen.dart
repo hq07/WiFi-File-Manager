@@ -1,6 +1,7 @@
 // android/lib/screens/upload_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 
@@ -39,6 +40,12 @@ class _UploadScreenState extends State<UploadScreen> {
     _loadShares();
   }
 
+  @override
+  void dispose() {
+    _clearUploadCache();
+    super.dispose();
+  }
+
   Future<void> _loadShares() async {
     final shares = await widget.api.getShares();
     setState(() => _shares = shares);
@@ -74,7 +81,77 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
+  String? _cacheDirPath;
+
+  Future<void> _autoSelectUploadsDir() async {
+    try {
+      final info = await widget.api.getUploadsDir();
+      final uploadsPath = info['path'] as String;
+      if (_shares.isEmpty) await _loadShares();
+      final match = _shares.where((s) => s['path'] == uploadsPath).toList();
+      if (match.isNotEmpty && mounted) {
+        setState(() => _selectedSharePath = uploadsPath);
+        await _loadSubdirs(uploadsPath);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _pickFolder() async {
+    if (Platform.isAndroid) {
+      await _pickFolderAndroid();
+    } else {
+      await _pickFolderFallback();
+    }
+  }
+
+  Future<void> _pickFolderAndroid() async {
+    const channel = MethodChannel('com.wififilemanager/saf');
+    try {
+      final result = await channel.invokeMethod('pickFolderSaf');
+      if (result == null) return;
+
+      final paths = (result['paths'] as List?)?.cast<String>() ?? [];
+      if (paths.isEmpty) {
+        setState(() => _result = '文件夹为空');
+        return;
+      }
+
+      final dirPath = result['dirPath'] as String;
+      final folderName = result['folderName'] as String;
+      final items = paths.map((p) {
+        final relative = p.substring(dirPath.length + 1);
+        return _UploadItem(localPath: p, relativePath: '$folderName/$relative');
+      }).toList();
+
+      setState(() {
+        _files = items;
+        _isFolderUpload = true;
+        _cacheDirPath = dirPath;
+        _result = null;
+      });
+
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('选择文件夹失败: ${e.code}\n${e.message}\n${e.details}'),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('选择文件夹异常: $e'),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFolderFallback() async {
     final dirPath = await FilePicker.getDirectoryPath();
     if (dirPath == null) return;
     final dir = Directory(dirPath);
@@ -98,6 +175,16 @@ class _UploadScreenState extends State<UploadScreen> {
       _isFolderUpload = true;
       _result = null;
     });
+    _autoSelectUploadsDir();
+  }
+
+  void _clearUploadCache() {
+    if (_cacheDirPath != null) {
+      try {
+        Directory(_cacheDirPath!).deleteSync(recursive: true);
+      } catch (_) {}
+      _cacheDirPath = null;
+    }
   }
 
   Future<void> _showCreateFolderDialog() async {
@@ -194,6 +281,7 @@ class _UploadScreenState extends State<UploadScreen> {
       _uploading = false;
       _currentFileName = null;
     });
+    _clearUploadCache();
   }
 
   void _cancelUpload() {
@@ -240,6 +328,34 @@ class _UploadScreenState extends State<UploadScreen> {
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark ? Colors.white70 : Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 120),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white10 : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: _files.length,
+                  itemBuilder: (ctx, i) {
+                    final name = _files[i].relativePath.split('/').last;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white60 : Colors.black54,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
