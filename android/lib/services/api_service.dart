@@ -216,6 +216,19 @@ class ApiService {
     return resp.data;
   }
 
+  Future<Map<String, dynamic>?> getFileMetadata(String filePath) async {
+    final dir = filePath.substring(0, filePath.lastIndexOf('/'));
+    final name = filePath.substring(filePath.lastIndexOf('/') + 1);
+    try {
+      final resp = await _dio.get('$_baseUrl/api/files/metadata',
+          queryParameters: {'path': dir, 'filename': name},
+          options: _authOptions);
+      return resp.data as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> searchFiles(String query) async {
     final resp = await _dio.get('$_baseUrl/api/files/search',
         queryParameters: {'q': query}, options: _authOptions);
