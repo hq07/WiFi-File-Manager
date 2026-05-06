@@ -166,6 +166,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       onToggleFullscreen: _toggleFullscreen,
       isFullscreen: _isFullscreen,
       historyService: widget.historyService,
+      initialPositionMs: widget.initialPositionMs,
     );
   }
   Widget _buildAudioPlaceholder() {
@@ -178,6 +179,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       playlist: _playlist,
       sleepTimer: _sleepTimer,
       historyService: widget.historyService,
+      initialPositionMs: widget.initialPositionMs,
     );
   }
   Widget _buildImagePlaceholder() {

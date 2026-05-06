@@ -121,12 +121,15 @@ class HistoryService {
   }) {
     return _enqueue(() async {
       final history = getHistory();
+      final existingIdx = history.indexWhere((h) => h.path == path);
+      final existing = existingIdx >= 0 ? history[existingIdx] : null;
       history.removeWhere((h) => h.path == path);
       history.insert(0, HistoryItem(
         name: name, path: path, dirPath: dirPath,
         size: size, playedAt: DateTime.now().toIso8601String(),
-        lastPositionMs: lastPositionMs, durationMs: durationMs,
-        completed: completed,
+        lastPositionMs: existing != null ? existing.lastPositionMs : lastPositionMs,
+        durationMs: existing != null ? existing.durationMs : durationMs,
+        completed: existing != null ? existing.completed : completed,
       ));
       if (history.length > _maxItems) history.removeRange(_maxItems, history.length);
       await _save(history);

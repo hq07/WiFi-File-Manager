@@ -17,6 +17,7 @@ class AudioPlayerView extends StatefulWidget {
   final PlaylistManager playlist;
   final SleepTimerManager sleepTimer;
   final HistoryService? historyService;
+  final int initialPositionMs;
 
   const AudioPlayerView({
     super.key,
@@ -27,6 +28,7 @@ class AudioPlayerView extends StatefulWidget {
     required this.playlist,
     required this.sleepTimer,
     this.historyService,
+    this.initialPositionMs = 0,
   });
 
   @override
@@ -79,6 +81,9 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       _controller!.setPlaybackSpeed(_playbackSpeed);
       if (mounted) {
         setState(() => _isLoading = false);
+        if (widget.initialPositionMs > 0) {
+          await _controller!.seekTo(Duration(milliseconds: widget.initialPositionMs));
+        }
         _controller!.play();
         _startHistoryTracking();
       }
