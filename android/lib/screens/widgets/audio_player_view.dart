@@ -66,10 +66,18 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
     }
   }
 
-  Future<void> _initVolume() async {
-    try {
-      _currentVolume = await VolumeController.instance.getVolume();
-    } catch (_) {}
+  void _initVolume() {
+    VolumeController.instance.getVolume().then((v) {
+      if (mounted) setState(() => _currentVolume = v);
+    }).catchError((_) {});
+    VolumeController.instance.addListener((v) {
+      if (mounted) {
+        setState(() {
+          _currentVolume = v;
+          _isMuted = v == 0;
+        });
+      }
+    });
   }
 
   Future<void> _initAudio() async {
@@ -161,6 +169,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   void dispose() {
     _positionUpdateTimer?.cancel();
     _disposeController();
+    VolumeController.instance.removeListener();
     super.dispose();
   }
 
@@ -356,13 +365,14 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
         child: Column(
           children: [
             _buildTopBar(isDark),
-            const Spacer(flex: 2),
+            const Spacer(flex: 1),
             _buildAlbumArt(isDark),
             const Spacer(flex: 1),
             _buildProgressSection(isDark),
             _buildMainControls(isDark),
+            const Spacer(flex: 1),
             _buildBottomBar(isDark),
-            const SizedBox(height: 12),
+            const SizedBox(height: 32),
           ],
         ),
       ),
