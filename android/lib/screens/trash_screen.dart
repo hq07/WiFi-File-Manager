@@ -183,8 +183,17 @@ class _TrashScreenState extends State<TrashScreen> {
                         ),
                         title: Text(item['name'], maxLines: 1, overflow: TextOverflow.ellipsis),
                         subtitle: Text(
-                          '${isDir ? '' : '${formatSize(item['size'])} · '}${_formatDate(item['deleted_at'])}',
+                          () {
+                            final parts = <String>[];
+                            if (!isDir) parts.add(formatSize(item['size']));
+                            parts.add(_formatDate(item['deleted_at']));
+                            final orig = item['original_path'] as String? ?? '';
+                            if (orig.isNotEmpty) parts.add(orig);
+                            return parts.join(' · ');
+                          }(),
                           style: const TextStyle(fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
