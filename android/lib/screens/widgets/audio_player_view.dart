@@ -49,7 +49,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   double _currentVolume = 0.5;
   bool _isMuted = false;
   double _volumeBeforeMute = 0.5;
-  Timer? _positionUpdateTimer;
 
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
@@ -72,7 +71,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.filePath != widget.filePath) {
       _saveCurrentPosition();
-      _positionUpdateTimer?.cancel();
       _initAudio();
     }
   }
@@ -169,6 +167,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   }
 
   void _startHistoryTracking() {
+    // 历史进度更新已由 audioPlayerService 定时处理，此处仅补充 addEntry 确保条目存在
     final hs = widget.historyService;
     if (hs == null) return;
     final item = widget.playlist.currentItem;
@@ -178,15 +177,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       dirPath: widget.filePath.substring(0, widget.filePath.lastIndexOf('/')),
       size: item['size'] as int? ?? widget.fileSize ?? 0,
     );
-    _positionUpdateTimer?.cancel();
-    _positionUpdateTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!_player.playing || _duration == Duration.zero) return;
-      hs.updatePosition(
-        widget.filePath,
-        _position.inMilliseconds,
-        _duration.inMilliseconds,
-      );
-    });
   }
 
   void _saveCurrentPosition() {
@@ -212,7 +202,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
 
   @override
   void dispose() {
-    _positionUpdateTimer?.cancel();
     _saveCurrentPosition();
     _positionSub?.cancel();
     _durationSub?.cancel();
@@ -379,7 +368,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () {
-                _positionUpdateTimer?.cancel();
                 _initAudio();
               },
               icon: const Icon(Icons.refresh),
@@ -603,7 +591,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
             onTap: widget.playlist.hasPrevious
                 ? () {
                     _saveCurrentPosition();
-                    _positionUpdateTimer?.cancel();
                     widget.playlist.previous();
                     _initAudio();
                   }
@@ -646,7 +633,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
             onTap: widget.playlist.hasNext
                 ? () {
                     _saveCurrentPosition();
-                    _positionUpdateTimer?.cancel();
                     widget.playlist.next();
                     _initAudio();
                   }
