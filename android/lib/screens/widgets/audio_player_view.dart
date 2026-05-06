@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:volume_controller/volume_controller.dart';
 import '../../services/api_service.dart';
+import '../../services/audio_handler.dart';
 import '../../utils/format_utils.dart';
 import '../../services/history_service.dart';
 import 'media_info_panel.dart';
@@ -93,8 +94,18 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       _controller!.setPlaybackSpeed(_playbackSpeed);
       if (mounted) {
         setState(() => _isLoading = false);
-        if (widget.initialPositionMs > 0) {
-          await _controller!.seekTo(Duration(milliseconds: widget.initialPositionMs));
+
+        // 判断是否从迷你栏重新进入同一首歌，使用 audioPlayerService 的当前进度
+        final aps = audioPlayerService;
+        final isSameTrack = aps.playlistItems.isNotEmpty &&
+            aps.currentIndex >= 0 &&
+            aps.currentIndex < aps.playlistItems.length &&
+            aps.playlistItems[aps.currentIndex]['path'] == widget.filePath;
+        final seekMs = isSameTrack
+            ? aps.player.position.inMilliseconds
+            : widget.initialPositionMs;
+        if (seekMs > 0) {
+          await _controller!.seekTo(Duration(milliseconds: seekMs));
         }
         _controller!.play();
         _startHistoryTracking();
