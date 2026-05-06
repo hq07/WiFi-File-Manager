@@ -47,8 +47,23 @@ class ApiService {
 
   bool get isLoggedIn => _token != null;
 
+  Future<String?> discoverServer() async {
+    final savedIp = await getSavedIp();
+    final port = await getSavedPort() ?? '7777';
+    if (savedIp == null) return null;
+    try {
+      final resp = await Dio().get('http://$savedIp:$port/api/discover',
+          options: Options(receiveTimeout: const Duration(seconds: 3)));
+      return resp.data['ip'] ?? savedIp;
+    } catch (_) {}
+    return null;
+  }
+
   Options get _authOptions =>
       Options(headers: {'Authorization': 'Bearer $_token'});
+
+  Map<String, String> get previewHeaders =>
+      {'Authorization': 'Bearer $_token'};
 
   Future<List<dynamic>> getShares() async {
     final resp =
@@ -97,8 +112,9 @@ class ApiService {
     return resp.data;
   }
 
-  String getPreviewUrl(String path) {
-    return '$_baseUrl/api/files/preview?path=${Uri.encodeComponent(path)}&token=$_token';
+  String getPreviewUrl(String path, {bool thumbnail = false}) {
+    final thumbParam = thumbnail ? '&thumbnail=true' : '';
+    return '$_baseUrl/api/files/preview?path=${Uri.encodeComponent(path)}&token=$_token$thumbParam';
   }
 
   Future<List<dynamic>> getDisks() async {
@@ -139,5 +155,58 @@ class ApiService {
     final resp = await _dio.get('$_baseUrl/api/browse',
         queryParameters: {'path': path}, options: _authOptions);
     return resp.data;
+  }
+
+  Future<Map<String, dynamic>> searchFiles(String query) async {
+    final resp = await _dio.get('$_baseUrl/api/files/search',
+        queryParameters: {'q': query}, options: _authOptions);
+    return resp.data;
+  }
+
+  Future<List<dynamic>> getSyncHistory() async {
+    final resp =
+        await _dio.get('$_baseUrl/api/sync/history', options: _authOptions);
+    return resp.data as List<dynamic>;
+  }
+
+  Future<void> postSyncHistory(List<dynamic> items) async {
+    await _dio.post('$_baseUrl/api/sync/history',
+        data: items, options: _authOptions);
+  }
+
+  Future<List<dynamic>> getSyncFavorites() async {
+    final resp =
+        await _dio.get('$_baseUrl/api/sync/favorites', options: _authOptions);
+    return resp.data as List<dynamic>;
+  }
+
+  Future<void> postSyncFavorites(List<dynamic> items) async {
+    await _dio.post('$_baseUrl/api/sync/favorites',
+        data: items, options: _authOptions);
+  }
+
+  Future<List<dynamic>> getTrash({String path = ''}) async {
+    final resp = await _dio.get('$_baseUrl/api/trash',
+        queryParameters: {'path': path}, options: _authOptions);
+    return resp.data as List<dynamic>;
+  }
+
+  Future<void> restoreTrash(String subPath) async {
+    await _dio.post('$_baseUrl/api/trash/restore',
+        queryParameters: {'path': subPath}, options: _authOptions);
+  }
+
+  Future<void> emptyTrash() async {
+    await _dio.post('$_baseUrl/api/trash/empty', options: _authOptions);
+  }
+
+  Future<Map<String, dynamic>> getCacheInfo() async {
+    final resp =
+        await _dio.get('$_baseUrl/api/cache/info', options: _authOptions);
+    return resp.data;
+  }
+
+  Future<void> clearServerCache() async {
+    await _dio.post('$_baseUrl/api/cache/clear', options: _authOptions);
   }
 }

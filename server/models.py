@@ -51,3 +51,19 @@ class DiskInfo(BaseModel):
     path: str
     total: int
     free: int
+
+
+class SyncHistoryItem(BaseModel):
+    path: str
+    name: str
+    timestamp: float
+    position: float = 0
+    duration: float = 0
+
+
+class SyncHistoryRequest(BaseModel):
+    items: list[SyncHistoryItem]
+
+
+class SyncFavoritesRequest(BaseModel):
+    items: list[dict]

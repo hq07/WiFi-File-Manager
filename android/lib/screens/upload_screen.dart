@@ -48,6 +48,7 @@ class _UploadScreenState extends State<UploadScreen> {
       await widget.api.uploadFile(
         _selectedSharePath!,
         _selectedFilePath!,
+        _selectedFileName!,
         (sent, total) {
           if (total > 0) setState(() { _progress = sent / total; });
         },

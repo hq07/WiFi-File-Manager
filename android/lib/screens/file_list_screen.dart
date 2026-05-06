@@ -3,15 +3,30 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/api_service.dart';
 import '../services/layout_prefs.dart';
+import '../services/history_service.dart';
+import '../services/favorites_service.dart';
 import '../utils/format_utils.dart';
 import 'media_player_screen.dart';
+import 'widgets/preview_image.dart';
 
 class FileListScreen extends StatefulWidget {
   final ApiService api;
   final LayoutPrefs layoutPrefs;
   final String path;
   final String title;
-  const FileListScreen({super.key, required this.api, required this.layoutPrefs, required this.path, required this.title});
+  final HistoryService? historyService;
+  final FavoritesService? favoritesService;
+  final ValueNotifier<int>? historyRefresh;
+  const FileListScreen({
+    super.key,
+    required this.api,
+    required this.layoutPrefs,
+    required this.path,
+    required this.title,
+    this.historyService,
+    this.favoritesService,
+    this.historyRefresh,
+  });
 
   @override
   State<FileListScreen> createState() => _FileListScreenState();
@@ -61,6 +76,9 @@ class _FileListScreenState extends State<FileListScreen> {
             layoutPrefs: widget.layoutPrefs,
             path: '$_currentPath/${item['name']}',
             title: item['name'],
+            historyService: widget.historyService,
+            favoritesService: widget.favoritesService,
+            historyRefresh: widget.historyRefresh,
           ),
         ),
       );
@@ -82,6 +100,9 @@ class _FileListScreenState extends State<FileListScreen> {
             filePath: filePath,
             fileName: item['name'],
             directoryFiles: directoryFiles,
+            historyService: widget.historyService,
+            layoutPrefs: widget.layoutPrefs,
+            initialPositionMs: widget.historyService?.getEntry(filePath)?.lastPositionMs ?? 0,
           ),
         ),
       );
@@ -89,12 +110,32 @@ class _FileListScreenState extends State<FileListScreen> {
   }
 
   void _onItemLongPress(Map<String, dynamic> item) {
+    final itemPath = '$_currentPath/${item['name']}';
+    final isFav = widget.favoritesService?.isFavorite(itemPath) ?? false;
     showModalBottomSheet(
       context: context,
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.favoritesService != null)
+              ListTile(
+                leading: Icon(isFav ? Icons.star : Icons.star_border, color: isFav ? Colors.amber : null),
+                title: Text(isFav ? '取消收藏' : '收藏'),
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.favoritesService!.toggle(FavoriteItem(
+                    name: item['name'] as String,
+                    path: itemPath,
+                    type: item['type'] as String,
+                    size: item['size'] as int? ?? 0,
+                  ));
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(isFav ? '已取消收藏' : '已收藏'), duration: const Duration(seconds: 1)),
+                  );
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.download),
               title: const Text('下载'),
@@ -208,16 +249,19 @@ class _FileListScreenState extends State<FileListScreen> {
     final name = item['name'] as String;
     final ext = name.split('.').last.toLowerCase();
     final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
-    if (isImage && widget.layoutPrefs.showThumbnails) {
+    final isVideo = ['mp4', 'avi', 'mkv', 'mov', 'webm'].contains(ext);
+    if ((isImage || isVideo) && widget.layoutPrefs.showThumbnails) {
       final filePath = '$_currentPath/$name';
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
-        child: Image.network(
-          widget.api.getPreviewUrl(filePath),
-          width: 48,
-          height: 48,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Icon(_getIcon(item['type'], name), size: 40),
+        child: SizedBox(
+          width: 48, height: 48,
+          child: PreviewImage(
+            url: widget.api.getPreviewUrl(filePath, thumbnail: isVideo),
+            headers: widget.api.previewHeaders,
+            fit: BoxFit.cover,
+            fallback: Icon(_getIcon(item['type'], name), size: 40),
+          ),
         ),
       );
     }
@@ -237,14 +281,16 @@ class _FileListScreenState extends State<FileListScreen> {
     final name = item['name'] as String;
     final ext = name.split('.').last.toLowerCase();
     final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
-    if (isImage && widget.layoutPrefs.showThumbnails) {
+    final isVideo = ['mp4', 'avi', 'mkv', 'mov', 'webm'].contains(ext);
+    if ((isImage || isVideo) && widget.layoutPrefs.showThumbnails) {
       final filePath = '$_currentPath/$name';
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-          widget.api.getPreviewUrl(filePath),
+        child: PreviewImage(
+          url: widget.api.getPreviewUrl(filePath, thumbnail: isVideo),
+          headers: widget.api.previewHeaders,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
+          fallback: Container(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Center(child: Icon(_getIcon(item['type'], name), size: 40)),
           ),

@@ -1,0 +1,8 @@
+fastapi>=0.136.1
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0.1,<4.1.0
+python-jose[cryptography]>=3.5.0
+python-multipart>=0.0.27
+uvicorn>=0.46.0
+send2trash>=1.8.3
+Pillow>=10.0.0
