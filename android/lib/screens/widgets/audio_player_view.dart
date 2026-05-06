@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:volume_controller/volume_controller.dart';
 import '../../services/api_service.dart';
 import '../../services/audio_handler.dart';
@@ -39,14 +39,22 @@ class AudioPlayerView extends StatefulWidget {
 }
 
 class _AudioPlayerViewState extends State<AudioPlayerView> {
-  VideoPlayerController? _controller;
   bool _isLoading = true;
   bool _hasError = false;
+  bool _isPlaying = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
   double _playbackSpeed = 1.0;
   double _currentVolume = 0.5;
   bool _isMuted = false;
   double _volumeBeforeMute = 0.5;
   Timer? _positionUpdateTimer;
+
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration?>? _durationSub;
+  StreamSubscription<PlayerState>? _stateSub;
+
+  AudioPlayer get _player => audioPlayerService.player;
 
   static const List<double> _speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
   static const List<int> _sleepTimerOptions = [15, 30, 45, 60, 90];
@@ -62,7 +70,8 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   void didUpdateWidget(covariant AudioPlayerView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.filePath != widget.filePath) {
-      _disposeController();
+      _saveCurrentPosition();
+      _positionUpdateTimer?.cancel();
       _initAudio();
     }
   }
@@ -86,30 +95,64 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       _isLoading = true;
       _hasError = false;
     });
-    try {
-      final url = widget.api.getPreviewUrl(widget.filePath);
-      _controller = VideoPlayerController.networkUrl(Uri.parse(url));
-      await _controller!.initialize();
-      _controller!.addListener(_onAudioProgress);
-      _controller!.setPlaybackSpeed(_playbackSpeed);
-      if (mounted) {
-        setState(() => _isLoading = false);
 
-        // 判断是否从迷你栏重新进入同一首歌，使用 audioPlayerService 的当前进度
-        final aps = audioPlayerService;
-        final isSameTrack = aps.playlistItems.isNotEmpty &&
-            aps.currentIndex >= 0 &&
-            aps.currentIndex < aps.playlistItems.length &&
-            aps.playlistItems[aps.currentIndex]['path'] == widget.filePath;
-        final seekMs = isSameTrack
-            ? aps.player.position.inMilliseconds
-            : widget.initialPositionMs;
-        if (seekMs > 0) {
-          await _controller!.seekTo(Duration(milliseconds: seekMs));
-        }
-        _controller!.play();
-        _startHistoryTracking();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _stateSub?.cancel();
+
+    _positionSub = _player.positionStream.listen((pos) {
+      if (!mounted) return;
+      setState(() => _position = pos);
+    });
+
+    _durationSub = _player.durationStream.listen((dur) {
+      if (!mounted || dur == null) return;
+      setState(() => _duration = dur);
+    });
+
+    _stateSub = _player.playerStateStream.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = state.playing;
+        _isLoading = state.processingState == ProcessingState.loading ||
+            state.processingState == ProcessingState.buffering;
+      });
+      if (state.processingState == ProcessingState.completed) {
+        _onTrackCompleted();
       }
+    });
+
+    try {
+      // 判断是否为同一首歌（从迷你栏或历史进入），续播而非从头播放
+      final aps = audioPlayerService;
+      final isSameTrack = aps.playlistItems.isNotEmpty &&
+          aps.currentIndex >= 0 &&
+          aps.currentIndex < aps.playlistItems.length &&
+          aps.playlistItems[aps.currentIndex]['path'] == widget.filePath;
+
+      await audioPlayerService.loadPlaylist(
+        widget.playlist.items,
+        startIndex: widget.playlist.currentIndex,
+        api: widget.api,
+      );
+
+      if (isSameTrack) {
+        // 同一首歌：续播，同步当前状态并停止 loading
+        _position = _player.position;
+        _duration = _player.duration ?? Duration.zero;
+        _isPlaying = _player.playing;
+        _isLoading = false;
+      } else {
+        // 新歌：恢复历史进度
+        final seekMs = widget.initialPositionMs;
+        if (seekMs > 0) {
+          await _player.seek(Duration(milliseconds: seekMs));
+        }
+      }
+
+      await audioPlayerService.setSpeed(_playbackSpeed);
+      _startHistoryTracking();
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -132,54 +175,43 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
     );
     _positionUpdateTimer?.cancel();
     _positionUpdateTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      final ctrl = _controller;
-      if (ctrl == null || !ctrl.value.isInitialized || !ctrl.value.isPlaying) return;
+      if (!_player.playing || _duration == Duration.zero) return;
       hs.updatePosition(
         widget.filePath,
-        ctrl.value.position.inMilliseconds,
-        ctrl.value.duration.inMilliseconds,
+        _position.inMilliseconds,
+        _duration.inMilliseconds,
       );
     });
   }
 
   void _saveCurrentPosition() {
     final hs = widget.historyService;
-    final ctrl = _controller;
-    if (hs == null || ctrl == null || !ctrl.value.isInitialized) return;
+    if (hs == null || _duration == Duration.zero) return;
     hs.updatePosition(
       widget.filePath,
-      ctrl.value.position.inMilliseconds,
-      ctrl.value.duration.inMilliseconds,
+      _position.inMilliseconds,
+      _duration.inMilliseconds,
     );
   }
 
-  void _onAudioProgress() {
-    final ctrl = _controller;
-    if (ctrl == null) return;
-    if (ctrl.value.position >= ctrl.value.duration &&
-        ctrl.value.duration > Duration.zero) {
-      widget.historyService?.markCompleted(widget.filePath);
-      if (widget.playlist.hasNext) {
-        widget.playlist.next();
-      } else {
-        ctrl.seekTo(Duration.zero);
-        ctrl.pause();
-      }
-    }
-    if (mounted) setState(() {});
-  }
-
-  void _disposeController() {
+  void _onTrackCompleted() {
     _saveCurrentPosition();
-    _controller?.removeListener(_onAudioProgress);
-    _controller?.dispose();
-    _controller = null;
+    widget.historyService?.markCompleted(widget.filePath);
+    if (widget.playlist.hasNext) {
+      widget.playlist.next();
+    } else {
+      _player.seek(Duration.zero);
+      _player.pause();
+    }
   }
 
   @override
   void dispose() {
     _positionUpdateTimer?.cancel();
-    _disposeController();
+    _saveCurrentPosition();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _stateSub?.cancel();
     VolumeController.instance.removeListener();
     super.dispose();
   }
@@ -187,15 +219,12 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   // ---- Actions ----
 
   void _togglePlayPause() {
-    final ctrl = _controller;
-    if (ctrl == null) return;
-    ctrl.value.isPlaying ? ctrl.pause() : ctrl.play();
-    setState(() {});
+    _isPlaying ? _player.pause() : _player.play();
   }
 
   void _setPlaybackSpeed(double speed) {
     _playbackSpeed = speed;
-    _controller?.setPlaybackSpeed(speed);
+    audioPlayerService.setSpeed(speed);
     setState(() {});
   }
 
@@ -213,7 +242,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   }
 
   void _onSleepTimerExpired() {
-    _controller?.pause();
+    _player.pause();
     setState(() {});
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -228,9 +257,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       context,
       fileName: item['name'] ?? widget.fileName,
       fileSize: item['size'] ?? widget.fileSize,
-      duration: _controller != null && _controller!.value.isInitialized
-          ? formatDuration(_controller!.value.duration)
-          : null,
+      duration: _duration > Duration.zero ? formatDuration(_duration) : null,
       format: (widget.filePath.split('.').last).toUpperCase(),
     );
   }
@@ -347,7 +374,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () {
-                _disposeController();
+                _positionUpdateTimer?.cancel();
                 _initAudio();
               },
               icon: const Icon(Icons.refresh),
@@ -395,7 +422,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   Widget _buildTopBar(bool isDark) {
     final item = widget.playlist.currentItem;
     final title = item['name'] ?? widget.fileName;
-    // Remove extension for display
     final displayTitle = title.contains('.')
         ? title.substring(0, title.lastIndexOf('.'))
         : title;
@@ -405,14 +431,12 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          // Back
           GestureDetector(
             onTap: () => Navigator.of(context).pop(),
             child: Icon(Icons.keyboard_arrow_down,
                 color: isDark ? Colors.white70 : Colors.black54, size: 32),
           ),
           const SizedBox(width: 12),
-          // Title + Artist
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,7 +456,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
               ],
             ),
           ),
-          // Media switch
           if (widget.onSwitchToVideo != null)
             GestureDetector(
               onTap: widget.onSwitchToVideo,
@@ -440,7 +463,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
                   color: isDark ? Colors.white54 : Colors.black45, size: 22),
             ),
           const SizedBox(width: 12),
-          // Info
           GestureDetector(
             onTap: _showInfoPanel,
             child: Icon(Icons.more_horiz,
@@ -485,7 +507,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
                 child: Icon(Icons.music_note,
                     color: Colors.white.withValues(alpha: 0.85), size: 80),
               ),
-              // Reflection
               Positioned(
                 top: 0,
                 left: 0,
@@ -516,15 +537,8 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
   // ---- Progress section ----
 
   Widget _buildProgressSection(bool isDark) {
-    final ctrl = _controller;
-    if (ctrl == null || !ctrl.value.isInitialized) {
-      return const SizedBox.shrink();
-    }
-
-    final position = ctrl.value.position;
-    final duration = ctrl.value.duration;
-    final maxMs = duration.inMilliseconds.toDouble().clamp(1.0, double.infinity);
-    final valueMs = position.inMilliseconds.toDouble().clamp(0.0, maxMs);
+    final maxMs = _duration.inMilliseconds.toDouble().clamp(1.0, double.infinity);
+    final valueMs = _position.inMilliseconds.toDouble().clamp(0.0, maxMs);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -544,8 +558,7 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
               min: 0,
               max: maxMs,
               onChanged: (v) {
-                ctrl.seekTo(Duration(milliseconds: v.round()));
-                setState(() {});
+                _player.seek(Duration(milliseconds: v.round()));
               },
             ),
           ),
@@ -554,11 +567,11 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(formatDuration(position),
+                Text(formatDuration(_position),
                     style: TextStyle(
                         fontSize: 11,
                         color: isDark ? Colors.white54 : Colors.black45)),
-                Text(formatDuration(duration),
+                Text(formatDuration(_duration),
                     style: TextStyle(
                         fontSize: 11,
                         color: isDark ? Colors.white54 : Colors.black45)),
@@ -578,21 +591,20 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Previous
           _buildCircleButton(
             icon: Icons.skip_previous,
             size: 36,
             enabled: widget.playlist.hasPrevious,
             onTap: widget.playlist.hasPrevious
                 ? () {
-                    _disposeController();
+                    _saveCurrentPosition();
+                    _positionUpdateTimer?.cancel();
                     widget.playlist.previous();
                     _initAudio();
                   }
                 : null,
           ),
           const SizedBox(width: 28),
-          // Play/Pause
           GestureDetector(
             onTap: _togglePlayPause,
             child: Container(
@@ -614,24 +626,22 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
                   ),
                 ],
               ),
-            child: Icon(
-                _controller?.value.isPlaying == true
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
+              child: Icon(
+                _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 color: Colors.white,
                 size: 36,
               ),
             ),
           ),
           const SizedBox(width: 28),
-          // Next
           _buildCircleButton(
             icon: Icons.skip_next,
             size: 36,
             enabled: widget.playlist.hasNext,
             onTap: widget.playlist.hasNext
                 ? () {
-                    _disposeController();
+                    _saveCurrentPosition();
+                    _positionUpdateTimer?.cancel();
                     widget.playlist.next();
                     _initAudio();
                   }
@@ -676,7 +686,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          // Play mode (sequential → shuffle → single repeat)
           GestureDetector(
             onTap: () => widget.playlist.cyclePlayMode(),
             child: Stack(
@@ -699,7 +708,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
             ),
           ),
           const SizedBox(width: 20),
-          // Sleep timer
           GestureDetector(
             onTap: _showSleepTimerSheet,
             child: widget.sleepTimer.isActive
@@ -712,7 +720,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
                     color: isDark ? Colors.white30 : Colors.black26, size: 20),
           ),
           const SizedBox(width: 20),
-          // Speed
           GestureDetector(
             onTap: _showSpeedSheet,
             child: Text('${_playbackSpeed}x',
@@ -725,7 +732,6 @@ class _AudioPlayerViewState extends State<AudioPlayerView> {
                         _playbackSpeed != 1.0 ? FontWeight.w600 : FontWeight.normal)),
           ),
           const Spacer(),
-          // Volume
           GestureDetector(
             onTap: _toggleMute,
             child: Icon(
