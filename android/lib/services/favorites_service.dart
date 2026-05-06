@@ -30,7 +30,7 @@ class FavoriteItem {
 
 class FavoritesService {
   static const _key = 'favorites';
-  late final SharedPreferences _prefs;
+  late SharedPreferences _prefs;
   ApiService? _api;
   Timer? _syncTimer;
 
@@ -45,11 +45,17 @@ class FavoritesService {
   }
 
   Future<void> _doSync() async {
-    if (_api == null || !_api!.isLoggedIn) return;
+    if (_api == null || !_api!.isLoggedIn) {
+      debugPrint('[FavSync] SKIP: api=${_api != null} loggedIn=${_api?.isLoggedIn}');
+      return;
+    }
     try {
-      await _api!.postSyncFavorites(getFavorites().map((f) => f.toJson()).toList());
+      final data = getFavorites().map((f) => f.toJson()).toList();
+      debugPrint('[FavSync] POST ${data.length} items');
+      await _api!.postSyncFavorites(data);
+      debugPrint('[FavSync] POST OK');
     } catch (e) {
-      debugPrint('Favorites sync failed: $e');
+      debugPrint('[FavSync] POST FAILED: $e');
     }
   }
 
@@ -93,6 +99,7 @@ class FavoritesService {
       list.insert(0, item);
     }
     _prefs.setString(_key, jsonEncode(list.map((f) => f.toJson()).toList()));
+    _doSync();
     _scheduleSync();
   }
 
@@ -100,6 +107,7 @@ class FavoritesService {
     final list = getFavorites();
     list.removeWhere((f) => f.path == path);
     _prefs.setString(_key, jsonEncode(list.map((f) => f.toJson()).toList()));
+    _doSync();
     _scheduleSync();
   }
 }
