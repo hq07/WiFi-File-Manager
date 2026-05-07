@@ -2,7 +2,7 @@
 chcp 65001 >nul
 title WiFi File Manager
 
-cd /d "%~dp0"
+pushd "%~dp0"
 
 set "UV=%USERPROFILE%\.local\bin\uv.exe"
 
@@ -29,4 +29,5 @@ echo ========================================
 echo.
 
 "%UV%" run python -m server.main
+popd
 pause

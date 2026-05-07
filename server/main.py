@@ -109,6 +109,8 @@ def _request_thumbnail(path: str) -> str | None:
 def _is_evicted(path: str) -> bool:
     """Detect iCloud-evicted files via macOS UF_OFFLINE flag.
     os.stat reports full file size for placeholders — only the flag reveals truth."""
+    if _sys.platform != 'darwin':
+        return False
     try:
         result = subprocess.run(
             ["/usr/bin/stat", "-f", "%f", path],
@@ -119,6 +121,9 @@ def _is_evicted(path: str) -> bool:
     except Exception:
         pass
     return False
+
+
+_OS_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_BINARY", 0)
 
 
 def _read_chunks_os(fd: int, offset: int, length: int | None):
@@ -150,14 +155,14 @@ def get_preview_response(path: str, request: Request, content_type: str) -> Resp
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         # open() triggers the actual download — blocks until enough data is on disk
-        fd = os.open(path, os.O_RDONLY)
+        fd = os.open(path, _OS_OPEN_FLAGS)
         file_size = os.fstat(fd).st_size
         if file_size == 0:
             os.close(fd)
             raise HTTPException(503, "File not yet available from iCloud")
         print(f"[iCloud] File now available — {file_size / 1048576:.1f} MB")
     else:
-        fd = os.open(path, os.O_RDONLY)
+        fd = os.open(path, _OS_OPEN_FLAGS)
         file_size = os.fstat(fd).st_size
 
     try:
@@ -284,8 +289,8 @@ def browse_files(path: str, user=Depends(get_current_user)):
             p = d["path"]
             if os.path.isdir(p):
                 try:
-                    st = os.statvfs(p)
-                    total = st.f_blocks * st.f_frsize
+                    usage = shutil.disk_usage(p)
+                    total = usage.total
                 except OSError:
                     total = 0
                 entries.append(FileItem(name=os.path.basename(p) or p, type="folder",
@@ -340,14 +345,15 @@ def download_file(path: str, user=Depends(get_current_user)):
     )
 
 
-TRASH_ORIGIN_FILE = os.path.join(os.path.dirname(__file__), "data", "trash_origin.json")
+_data_dir_name = "data.win" if _sys.platform == "win32" else "data"
+TRASH_ORIGIN_FILE = os.path.join(os.path.dirname(__file__), _data_dir_name, "trash_origin.json")
 
 
 def _load_trash_origins() -> dict:
     os.makedirs(os.path.dirname(TRASH_ORIGIN_FILE), exist_ok=True)
     if os.path.exists(TRASH_ORIGIN_FILE):
         try:
-            with open(TRASH_ORIGIN_FILE, "r") as f:
+            with open(TRASH_ORIGIN_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, ValueError):
             pass
@@ -356,14 +362,20 @@ def _load_trash_origins() -> dict:
 
 def _save_trash_origins(data: dict):
     os.makedirs(os.path.dirname(TRASH_ORIGIN_FILE), exist_ok=True)
-    with open(TRASH_ORIGIN_FILE, "w") as f:
+    with open(TRASH_ORIGIN_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _get_trash_dir() -> str:
+    """Return platform-appropriate trash directory."""
+    if _sys.platform == "darwin":
+        return os.path.expanduser("~/.Trash")
+    return os.path.join(os.path.expanduser("~"), ".WiFiFileManager", "Trash")
 
 
 @app.post("/api/files/trash")
 def trash_file(path: str, user=Depends(get_current_user)):
     """Move file/folder to system trash and record original location."""
-    from send2trash import send2trash
     if not config.is_path_allowed(path):
         raise HTTPException(status_code=403, detail="Access denied")
     if not os.path.exists(path):
@@ -373,16 +385,27 @@ def trash_file(path: str, user=Depends(get_current_user)):
     origins = _load_trash_origins()
     origins[name] = original_parent
     _save_trash_origins(origins)
-    send2trash(path)
+    if _sys.platform == "darwin":
+        from send2trash import send2trash
+        send2trash(path)
+    else:
+        trash_dir = _get_trash_dir()
+        os.makedirs(trash_dir, exist_ok=True)
+        dst = os.path.join(trash_dir, name)
+        if os.path.exists(dst):
+            base, ext = os.path.splitext(name)
+            i = 1
+            while os.path.exists(dst):
+                dst = os.path.join(trash_dir, f"{base} ({i}){ext}")
+                i += 1
+        shutil.move(path, dst)
     return {"status": "ok"}
 
 
 @app.delete("/api/files/delete")
 def delete_file(path: str, user=Depends(get_current_user)):
     """Permanent delete — only used from trash management screen."""
-    if platform.system() != "Darwin":
-        raise HTTPException(status_code=400, detail="Trash management is only supported on macOS")
-    trash_dir = os.path.expanduser("~/.Trash")
+    trash_dir = _get_trash_dir()
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not found")
     if not os.path.realpath(path).startswith(os.path.realpath(trash_dir)):
@@ -401,9 +424,9 @@ def delete_file(path: str, user=Depends(get_current_user)):
 @app.get("/api/trash")
 def list_trash(path: str = "", user=Depends(get_current_user)):
     """List files in system trash."""
-    if platform.system() != "Darwin":
+    trash_dir = _get_trash_dir()
+    if not os.path.isdir(trash_dir):
         return []
-    trash_dir = os.path.expanduser("~/.Trash")
     target = os.path.join(trash_dir, path) if path else trash_dir
     if not os.path.realpath(target).startswith(os.path.realpath(trash_dir)):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -433,9 +456,7 @@ def list_trash(path: str = "", user=Depends(get_current_user)):
 @app.post("/api/trash/restore")
 def restore_trash(name: str, user=Depends(get_current_user)):
     """Restore a file from system trash to its original location."""
-    if platform.system() != "Darwin":
-        raise HTTPException(status_code=400, detail="Trash restore is only supported on macOS")
-    trash_dir = os.path.expanduser("~/.Trash")
+    trash_dir = _get_trash_dir()
     src = os.path.join(trash_dir, name)
     if not os.path.exists(src):
         raise HTTPException(status_code=404, detail="File not found in trash")
@@ -461,9 +482,7 @@ def restore_trash(name: str, user=Depends(get_current_user)):
 @app.post("/api/trash/empty")
 def empty_trash(user=Depends(get_current_user)):
     """Permanently delete all files in system trash."""
-    if platform.system() != "Darwin":
-        return {"status": "ok", "deleted": 0}
-    trash_dir = os.path.expanduser("~/.Trash")
+    trash_dir = _get_trash_dir()
     if not os.path.isdir(trash_dir):
         return {"status": "ok", "deleted": 0}
     count = 0
@@ -580,8 +599,9 @@ def get_common_paths(user=Depends(get_current_user)):
             ("图片", os.path.join(home, "Pictures")),
             ("影片", os.path.join(home, "Movies")),
             ("音乐", os.path.join(home, "Music")),
-            ("外置磁盘", "/Volumes"),
         ]
+        if _sys.platform == "darwin":
+            candidates.append(("外置磁盘", "/Volumes"))
     return [{"name": name, "path": path} for name, path in candidates if os.path.isdir(path)]
 
 
@@ -647,7 +667,6 @@ def _start_udp_discovery(port: int):
     t.start()
 
 
-_data_dir_name = "data.win" if _sys.platform == "win32" else "data"
 SYNC_DATA_DIR = os.path.join(os.path.dirname(__file__), _data_dir_name)
 
 
