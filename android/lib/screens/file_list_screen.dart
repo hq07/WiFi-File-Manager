@@ -294,6 +294,54 @@ class _FileListScreenState extends State<FileListScreen> {
     }
   }
 
+  Future<void> _showFolderInfo(Map<String, dynamic> item) async {
+    final folderPath = item['path'] as String? ?? _joinPath(_currentPath, item['name']);
+    try {
+      final info = await widget.api.getFolderInfo(folderPath);
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(item['name']),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _infoRow(Icons.videocam, '视频', info['video'] ?? 0, Colors.red),
+              _infoRow(Icons.image, '图片', info['image'] ?? 0, Colors.blue),
+              _infoRow(Icons.audiotrack, '音频', info['audio'] ?? 0, Colors.green),
+              _infoRow(Icons.insert_drive_file, '其他', info['other'] ?? 0, Colors.grey),
+              const Divider(),
+              _infoRow(Icons.folder, '子文件夹', info['folder'] ?? 0, Colors.amber),
+              if (info['truncated'] == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('文件过多，统计可能不完整', style: TextStyle(fontSize: 12, color: Colors.orange)),
+                ),
+            ],
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) showCopyableSnackBar(context, '获取失败: $e', isError: true);
+    }
+  }
+
+  Widget _infoRow(IconData icon, String label, int count, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(fontSize: 15)),
+          const Spacer(),
+          Text('$count', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
   Future<void> _renameFile(Map<String, dynamic> item) async {
     final controller = TextEditingController(text: item['name']);
     final newName = await showDialog<String>(
@@ -364,12 +412,30 @@ class _FileListScreenState extends State<FileListScreen> {
 
   Widget _buildGridThumbnail(Map<String, dynamic> item) {
     if (item['type'] == 'folder') {
-      return Container(
-        decoration: BoxDecoration(
-          color: Colors.amber.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Center(child: Icon(Icons.folder, color: Colors.amber, size: 48)),
+      return Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Center(child: Icon(Icons.folder, color: Colors.amber, size: 48)),
+          ),
+          Positioned(
+            right: 2, top: 2,
+            child: GestureDetector(
+              onTap: () => _showFolderInfo(item),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.info_outline, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+        ],
       );
     }
     final name = item['name'] as String;
@@ -433,11 +499,16 @@ class _FileListScreenState extends State<FileListScreen> {
       itemBuilder: (_, i) {
         final item = _items[i];
         final metaLine = _buildMetaLine(item);
+        final isFolder = item['type'] == 'folder';
         return ListTile(
           key: ValueKey(item['path'] ?? item['name']),
           leading: _buildThumbnail(item),
           title: Text(item['name']),
           subtitle: metaLine.isNotEmpty ? Text(metaLine, style: const TextStyle(fontSize: 12)) : null,
+          trailing: isFolder ? IconButton(
+            icon: Icon(Icons.info_outline, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            onPressed: () => _showFolderInfo(item),
+          ) : null,
           onTap: () => _onItemTap(item),
           onLongPress: () => _onItemLongPress(item),
         );
