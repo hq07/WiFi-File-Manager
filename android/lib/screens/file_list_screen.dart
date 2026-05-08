@@ -312,6 +312,8 @@ class _FileListScreenState extends State<FileListScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              _infoRow(Icons.description, '总计', (info['video'] ?? 0) + (info['image'] ?? 0) + (info['audio'] ?? 0) + (info['other'] ?? 0), Theme.of(context).colorScheme.primary),
+              const Divider(),
               _infoRow(Icons.videocam, '视频', info['video'] ?? 0, Colors.red),
               _infoRow(Icons.image, '图片', info['image'] ?? 0, Colors.blue),
               _infoRow(Icons.audiotrack, '音频', info['audio'] ?? 0, Colors.green),
