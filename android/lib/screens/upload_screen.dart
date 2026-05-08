@@ -38,6 +38,7 @@ class _UploadScreenState extends State<UploadScreen> {
   bool _cancelled = false;
   String? _currentFileName;
   String? _result;
+  DateTime _lastProgressUpdate = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -318,17 +319,19 @@ class _UploadScreenState extends State<UploadScreen> {
           _currentFileName = relativePath;
           _fileProgress = 0;
         });
+        String? tempPath;
         try {
           final readResult = await _safChannel.invokeMethod('readSafBytes', fileUri);
           if (readResult is Uint8List) {
             await widget.api.uploadBytes(
               _selectedSharePath!, readResult, relativePath,
-              (sent, t) { if (t > 0) setState(() => _fileProgress = sent / t); },
+              _throttledProgress,
             );
           } else {
+            tempPath = readResult as String;
             await widget.api.uploadFile(
-              _selectedSharePath!, readResult as String, relativePath,
-              (sent, t) { if (t > 0) setState(() => _fileProgress = sent / t); },
+              _selectedSharePath!, tempPath, relativePath,
+              _throttledProgress,
             );
           }
           uploaded++;
@@ -341,6 +344,11 @@ class _UploadScreenState extends State<UploadScreen> {
             setState(() => _result = '上传失败: $relativePath\n$e');
             stack.clear();
             break;
+          }
+        } finally {
+          // 用后即删临时文件
+          if (tempPath != null) {
+            try { File(tempPath).deleteSync(); } catch (_) {}
           }
         }
         setState(() {});
@@ -355,6 +363,14 @@ class _UploadScreenState extends State<UploadScreen> {
       _uploading = false;
       _currentFileName = null;
     });
+  }
+
+  void _throttledProgress(int sent, int total) {
+    if (total <= 0) return;
+    final now = DateTime.now();
+    if (sent < total && now.difference(_lastProgressUpdate).inMilliseconds < 100) return;
+    _lastProgressUpdate = now;
+    setState(() => _fileProgress = sent / total);
   }
 
   void _cancelUpload() {
