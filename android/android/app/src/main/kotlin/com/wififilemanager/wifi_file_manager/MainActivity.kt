@@ -19,10 +19,14 @@ class MainActivity : AudioServiceActivity() {
         safFolderPicker = SafFolderPicker(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.wififilemanager/saf")
             .setMethodCallHandler { call, result ->
-                if (call.method == "pickFolderSaf") {
-                    safFolderPicker?.pickFolderSaf(result)
-                } else {
-                    result.notImplemented()
+                when (call.method) {
+                    "pickFolderSaf" -> safFolderPicker?.pickFolderSaf(result)
+                    "startCopy" -> safFolderPicker?.startCopy(result)
+                    "cancelCopy" -> {
+                        safFolderPicker?.cancelCopy()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
                 }
             }
     }
