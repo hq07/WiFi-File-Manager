@@ -13,6 +13,8 @@ class SafFolderPicker(private val activity: Activity) {
 
     companion object {
         private const val REQUEST_CODE = 9876
+        /** Binder / MethodChannel Payload 上限约 1MB；仅允许更小体积分段走内存回传，避免 TransactionTooLargeException。 */
+        private const val MAX_INLINE_BYTES = 512 * 1024
     }
 
     private var pendingResult: MethodChannel.Result? = null
@@ -166,36 +168,39 @@ class SafFolderPicker(private val activity: Activity) {
         Thread {
             try {
                 val uri = Uri.parse(uriString)
-                // 查询文件大小
                 var fileSize = -1L
-                activity.contentResolver.query(uri,
+                activity.contentResolver.query(
+                    uri,
                     arrayOf(DocumentsContract.Document.COLUMN_SIZE),
-                    null, null, null)?.use { c ->
+                    null, null, null
+                )?.use { c ->
                     if (c.moveToFirst()) fileSize = c.getLong(0)
                 }
 
-                if (fileSize in 0..10_000_000) {
-                    // 小文件（≤10MB）：直接读入内存
-                    val bytes = activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                val runOnUi: (Any?) -> Unit = { payload ->
                     activity.runOnUiThread {
-                        if (bytes != null) result.success(bytes)
-                        else result.error("read_error", "无法读取文件", null)
-                    }
-                } else {
-                    // 大文件：复制到缓存，返回路径
-                    val cacheFile = File(activity.cacheDir, "wfm_saf_upload")
-                    cacheFile.delete()
-                    activity.contentResolver.openInputStream(uri)?.use { input ->
-                        FileOutputStream(cacheFile).use { output ->
-                            input.copyTo(output, bufferSize = 65536)
+                        when (payload) {
+                            is ByteArray -> result.success(payload)
+                            is String -> result.success(payload)
+                            null -> result.error("read_error", "无法读取文件", null)
+                            else -> result.error("read_error", "无法读取文件", null)
                         }
                     }
-                    activity.runOnUiThread {
-                        if (cacheFile.exists() && cacheFile.length() > 0) {
-                            result.success(cacheFile.absolutePath)
-                        } else {
-                            result.error("read_error", "无法读取文件", null)
-                        }
+                }
+
+                when {
+                    fileSize < 0 -> {
+                        // 大小未知：一律落盘，避免「宣称很小实际很大」撑爆 Binder 或内存
+                        val tmp = copyUriToStaging(uri)
+                        runOnUi(tmp.absolutePath)
+                    }
+                    fileSize <= MAX_INLINE_BYTES -> {
+                        val bytes = activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        runOnUi(bytes)
+                    }
+                    else -> {
+                        val tmp = copyUriToStaging(uri)
+                        runOnUi(tmp.absolutePath)
                     }
                 }
             } catch (e: Exception) {
@@ -204,6 +209,20 @@ class SafFolderPicker(private val activity: Activity) {
                 }
             }
         }.start()
+    }
+
+    /** 流式复制到应用缓存目录下的唯一临时文件，供 Flutter 用 uploadFile 上传（内存占用低、不过 Binder 大包）。 */
+    private fun copyUriToStaging(uri: Uri): File {
+        val tmp = File.createTempFile("wfm_saf_", ".upload", activity.cacheDir)
+        activity.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(tmp).use { output ->
+                input.copyTo(output, bufferSize = 65536)
+            }
+        } ?: throw IllegalStateException("openInputStream failed")
+        if (!tmp.exists()) {
+            throw IllegalStateException("staging file missing")
+        }
+        return tmp
     }
 
     private fun sendProgress(current: String, progress: Double) {

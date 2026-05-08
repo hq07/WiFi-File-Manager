@@ -1,5 +1,6 @@
 // android/lib/screens/upload_screen.dart
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -284,7 +285,7 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<void> _uploadSafFolder() async {
     final folderName = _files[0].relativePath;
     final stack = <(String, String)>[('saf://tree', folderName)];
-    int total = 0;
+    int uploaded = 0;
 
     while (stack.isNotEmpty && !_cancelled) {
       final (uri, relPath) = stack.removeLast();
@@ -297,14 +298,12 @@ class _UploadScreenState extends State<UploadScreen> {
       }
       if (dirResult == null) continue;
 
-      // 先处理子目录（加入栈）
       final dirs = (dirResult['dirs'] as List?)?.cast<String>() ?? [];
       for (final d in dirs) {
         final dirName = Uri.parse(d).pathSegments.last;
         stack.add((d, '$relPath/$dirName'));
       }
 
-      // 上传当前目录的文件
       final files = (dirResult['files'] as List?) ?? [];
       for (final f in files) {
         if (_cancelled) break;
@@ -324,20 +323,20 @@ class _UploadScreenState extends State<UploadScreen> {
           if (readResult is Uint8List) {
             await widget.api.uploadBytes(
               _selectedSharePath!, readResult, relativePath,
-              (sent, total) { if (total > 0) setState(() => _fileProgress = sent / total); },
+              (sent, t) { if (t > 0) setState(() => _fileProgress = sent / t); },
             );
           } else {
             await widget.api.uploadFile(
               _selectedSharePath!, readResult as String, relativePath,
-              (sent, total) { if (total > 0) setState(() => _fileProgress = sent / total); },
+              (sent, t) { if (t > 0) setState(() => _fileProgress = sent / t); },
             );
           }
-          _completedCount++;
-          total++;
+          uploaded++;
+          _completedCount = uploaded;
         } catch (e) {
           if (e.toString().contains('409')) {
             _skipCount++;
-            total++;
+            uploaded++;
           } else {
             setState(() => _result = '上传失败: $relativePath\n$e');
             stack.clear();
@@ -350,7 +349,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
     if (!_cancelled) {
       final skipped = _skipCount > 0 ? '，跳过 $_skipCount 个已存在文件' : '';
-      setState(() => _result = '上传完成: $_completedCount/$total$skipped');
+      setState(() => _result = '上传完成: $uploaded 个文件$skipped');
     }
     setState(() {
       _uploading = false;
@@ -496,7 +495,9 @@ class _UploadScreenState extends State<UploadScreen> {
               LinearProgressIndicator(value: _fileProgress > 0 ? _fileProgress : null),
               const SizedBox(height: 8),
               Text(
-                '上传中 $_completedCount/${_files.length}  ${(_fileProgress * 100).toStringAsFixed(0)}%',
+                _files.length == 1 && _files[0].safUri == 'saf://tree'
+                    ? '已上传 $_completedCount 个  ${(_fileProgress * 100).toStringAsFixed(0)}%'
+                    : '上传中 $_completedCount/${_files.length}  ${(_fileProgress * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(fontSize: 13),
               ),
               if (_currentFileName != null)
