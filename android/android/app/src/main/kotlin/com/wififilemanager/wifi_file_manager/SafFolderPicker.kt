@@ -109,9 +109,14 @@ class SafFolderPicker(private val activity: Activity) {
     fun listDirectory(uriString: String, result: MethodChannel.Result) {
         Thread {
             try {
-                val uri = Uri.parse(uriString)
-                val docId = DocumentsContract.getDocumentId(uri)
-                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(pendingTreeUri!!, docId)
+                val treeUri = pendingTreeUri!!
+                val childrenUri = if (uriString == "saf://tree") {
+                    val treeDocId = DocumentsContract.getTreeDocumentId(treeUri)
+                    DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, treeDocId)
+                } else {
+                    val docId = DocumentsContract.getDocumentId(Uri.parse(uriString))
+                    DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+                }
                 val files = mutableListOf<Map<String, String>>()
                 val dirs = mutableListOf<String>()
 
@@ -130,7 +135,7 @@ class SafFolderPicker(private val activity: Activity) {
                         val childId = cursor.getString(idCol) ?: continue
                         val name = cursor.getString(nameCol) ?: continue
                         val mimeType = cursor.getString(mimeCol) ?: ""
-                        val childUri = DocumentsContract.buildDocumentUriUsingTree(pendingTreeUri!!, childId)
+                        val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
                         if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                             dirs.add(childUri.toString())
                         } else {
