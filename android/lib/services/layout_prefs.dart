@@ -1,4 +1,5 @@
 // android/lib/services/layout_prefs.dart
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum LayoutMode { list, grid }
@@ -57,4 +58,51 @@ class LayoutPrefs {
 
   bool get sortAscending => _prefs.getBool(_keySortAscending) ?? true;
   set sortAscending(bool v) => _prefs.setBool(_keySortAscending, v);
+
+  // ---- 每个文件夹独立排序偏好 ----
+
+  static const _keySortPrefs = 'sort_folder_prefs';
+
+  Map<String, Map<String, dynamic>> get _sortFolderPrefs {
+    final raw = _prefs.getString(_keySortPrefs);
+    if (raw == null) return {};
+    try {
+      final decoded = json.decode(raw) as Map<String, dynamic>;
+      return decoded.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// 获取指定文件夹的排序偏好，没有则返回全局默认
+  (SortField, bool) getSortForFolder(String path) {
+    final prefs = _sortFolderPrefs;
+    final entry = prefs[path];
+    if (entry != null) {
+      final field = SortField.values.asNameMap()[entry['sort_field']] ?? SortField.name;
+      final ascending = entry['sort_ascending'] as bool? ?? true;
+      return (field, ascending);
+    }
+    return (sortField, sortAscending);
+  }
+
+  /// 保存指定文件夹的排序偏好
+  void setSortForFolder(String path, SortField field, bool ascending) {
+    final prefs = _sortFolderPrefs;
+    prefs[path] = {'sort_field': field.name, 'sort_ascending': ascending};
+    _prefs.setString(_keySortPrefs, json.encode(prefs));
+    // 同时更新全局默认
+    sortField = field;
+    sortAscending = ascending;
+  }
+
+  /// 从服务器设置同步所有文件夹排序偏好
+  void syncSortPrefsFromServer(Map<String, dynamic> serverPrefs) {
+    final existing = _sortFolderPrefs;
+    for (final entry in serverPrefs.entries) {
+      final value = Map<String, dynamic>.from(entry.value);
+      existing[entry.key] = value;
+    }
+    _prefs.setString(_keySortPrefs, json.encode(existing));
+  }
 }

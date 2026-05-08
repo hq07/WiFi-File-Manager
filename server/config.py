@@ -21,6 +21,7 @@ class Config:
         self.hide_dot_underscore: bool = True
         self.sort_field: str = "name"
         self.sort_ascending: bool = True
+        self.sort_prefs: dict = {}  # {path: {sort_field, sort_ascending}}
         self._load()
         self._ensure_uploads_dir()
 
@@ -35,6 +36,7 @@ class Config:
             self.hide_dot_underscore = data.get("hide_dot_underscore", True)
             self.sort_field = data.get("sort_field", "name")
             self.sort_ascending = data.get("sort_ascending", True)
+            self.sort_prefs = data.get("sort_prefs", {})
             # Backfill visible field for old configs
             for d in self.shared_dirs:
                 d.setdefault("visible", True)
@@ -51,6 +53,7 @@ class Config:
                 "hide_dot_underscore": self.hide_dot_underscore,
                 "sort_field": self.sort_field,
                 "sort_ascending": self.sort_ascending,
+                "sort_prefs": self.sort_prefs,
             }, f, indent=2)
 
     def _ensure_uploads_dir(self):
@@ -133,6 +136,7 @@ class Config:
             "hide_dot_underscore": self.hide_dot_underscore,
             "sort_field": self.sort_field,
             "sort_ascending": self.sort_ascending,
+            "sort_prefs": self.sort_prefs,
         }
 
     def update_settings(self, settings: dict):
@@ -142,6 +146,11 @@ class Config:
             self.sort_field = settings["sort_field"]
         if "sort_ascending" in settings:
             self.sort_ascending = bool(settings["sort_ascending"])
+        if "sort_folder" in settings:
+            folder = settings["sort_folder"]
+            field = settings.get("sort_field", self.sort_field)
+            ascending = settings.get("sort_ascending", self.sort_ascending)
+            self.sort_prefs[folder] = {"sort_field": field, "sort_ascending": ascending}
         self._save()
 
     def get_shared_dir_by_id(self, share_id: str) -> str | None:

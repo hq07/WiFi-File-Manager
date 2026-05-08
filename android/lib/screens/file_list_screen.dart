@@ -51,8 +51,10 @@ class _FileListScreenState extends State<FileListScreen> {
     super.initState();
     _currentPath = widget.path.replaceAll(RegExp(r'/+'), '/');
     _layoutMode = widget.layoutPrefs.layoutMode;
-    _sortField = widget.layoutPrefs.sortField;
-    _sortAscending = widget.layoutPrefs.sortAscending;
+    // 加载该文件夹的排序偏好（没有则用全局默认）
+    final (field, ascending) = widget.layoutPrefs.getSortForFolder(_currentPath);
+    _sortField = field;
+    _sortAscending = ascending;
     _loadFiles();
   }
 
@@ -134,12 +136,13 @@ class _FileListScreenState extends State<FileListScreen> {
                       _sortField = field;
                       _sortAscending = true;
                     }
-                    widget.layoutPrefs.sortField = _sortField;
-                    widget.layoutPrefs.sortAscending = _sortAscending;
+                    // 保存该文件夹的排序偏好
+                    widget.layoutPrefs.setSortForFolder(_currentPath, _sortField, _sortAscending);
                     _sortItems(_items);
                   });
-                  // 同步排序偏好到服务器
+                  // 同步到服务器
                   widget.api.updateSettings({
+                    'sort_folder': _currentPath,
                     'sort_field': _sortField.name,
                     'sort_ascending': _sortAscending,
                   }).catchError((_) {});

@@ -91,6 +91,11 @@ class _LoginScreenState extends State<LoginScreen> {
             widget.layoutPrefs.sortField = SortField.values.asNameMap()[field] ?? SortField.name;
             widget.layoutPrefs.sortAscending = ascending;
           }
+          if (settings['sort_prefs'] != null) {
+            widget.layoutPrefs.syncSortPrefsFromServer(
+              Map<String, dynamic>.from(settings['sort_prefs']),
+            );
+          }
         } catch (_) {}
         // Init services in background, don't block navigation
         widget.historyService.init(widget.prefs, api: widget.api);
