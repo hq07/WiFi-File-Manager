@@ -103,7 +103,8 @@ def _generate_thumbnail_bg(path: str, max_size: int = 320) -> None:
             os.replace(tmp, cache)
         elif os.path.exists(tmp):
             os.remove(tmp)
-    except Exception:
+    except Exception as e:
+        print(f"[thumb] Error generating thumbnail for {os.path.basename(path)}: {e}")
         if os.path.exists(tmp):
             os.remove(tmp)
     finally:
@@ -591,8 +592,10 @@ def rename_file(path: str, new_name: str, user=Depends(get_current_user)):
 @app.get("/api/files/preview")
 def preview_file(path: str, request: Request, thumbnail: bool = False, user=Depends(get_current_user_query)):
     if not config.is_path_allowed(path):
+        print(f"[preview] 403 Access denied: {path}")
         raise HTTPException(status_code=403, detail="Access denied")
     if not os.path.isfile(path):
+        print(f"[preview] 404 File not found: {path}")
         raise HTTPException(status_code=404, detail="File not found")
     if thumbnail:
         thumb = _request_thumbnail(path)
