@@ -282,68 +282,66 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _uploadSafFolder() async {
-    setState(() => _currentFileName = '正在扫描文件…');
+    final folderName = _files[0].relativePath;
+    // BFS 栈：(uri, relativePath)
+    final stack = <(String, String)>[('saf://tree', folderName)];
+    int total = 0;
 
-    Map<String, dynamic>? scanResult;
-    try {
-      scanResult = await _safChannel.invokeMethod('collectFiles')
-          .timeout(const Duration(seconds: 30), onTimeout: () => null);
-    } catch (_) {}
-
-    if (_cancelled || scanResult == null) {
-      setState(() {
-        _uploading = false;
-        _currentFileName = null;
-        _result = scanResult == null ? '扫描超时' : '已取消';
-      });
-      return;
-    }
-
-    final uris = (scanResult['uris'] as List?)?.cast<String>() ?? [];
-    final relatives = (scanResult['relatives'] as List?)?.cast<String>() ?? [];
-    final folderName = scanResult['folderName'] as String? ?? 'folder';
-
-    if (uris.isEmpty) {
-      setState(() {
-        _uploading = false;
-        _currentFileName = null;
-        _result = '文件夹为空';
-      });
-      return;
-    }
-
-    final total = uris.length;
-    for (int i = 0; i < total; i++) {
-      if (_cancelled) break;
-      final rel = i < relatives.length ? relatives[i] : 'file_$i';
-      String relativePath = '$folderName/$rel';
-      if (_selectedSubdir != null && _selectedSubdir!.isNotEmpty) {
-        relativePath = '$_selectedSubdir/$relativePath';
-      }
-      setState(() {
-        _currentFileName = rel;
-        _fileProgress = 0;
-      });
+    while (stack.isNotEmpty && !_cancelled) {
+      final (uri, relPath) = stack.removeLast();
+      Map<String, dynamic>? dirResult;
       try {
-        final bytes = await _safChannel.invokeMethod('readSafBytes', uris[i]) as Uint8List;
-        await widget.api.uploadBytes(
-          _selectedSharePath!,
-          bytes,
-          relativePath,
-          (sent, total) {
-            if (total > 0) setState(() => _fileProgress = sent / total);
-          },
-        );
-        _completedCount++;
-      } catch (e) {
-        if (e.toString().contains('409')) {
-          _skipCount++;
-        } else {
-          setState(() => _result = '上传失败: $rel\n$e');
-          break;
-        }
+        dirResult = await _safChannel.invokeMethod('listDirectory', uri) as Map<String, dynamic>?;
+      } catch (_) {
+        continue;
       }
-      setState(() {});
+      if (dirResult == null) continue;
+
+      // 先处理子目录（加入栈）
+      final dirs = (dirResult['dirs'] as List?)?.cast<String>() ?? [];
+      for (final d in dirs) {
+        final dirName = Uri.parse(d).pathSegments.last;
+        stack.add((d, '$relPath/$dirName'));
+      }
+
+      // 上传当前目录的文件
+      final files = (dirResult['files'] as List?)?.cast<Map>() ?? [];
+      for (final f in files) {
+        if (_cancelled) break;
+        final fileUri = f['uri'] as String;
+        final fileName = f['name'] as String;
+        String relativePath = '$relPath/$fileName';
+        if (_selectedSubdir != null && _selectedSubdir!.isNotEmpty) {
+          relativePath = '$_selectedSubdir/$relativePath';
+        }
+        setState(() {
+          _currentFileName = relativePath;
+          _fileProgress = 0;
+        });
+        try {
+          final bytes = await _safChannel.invokeMethod('readSafBytes', fileUri) as Uint8List;
+          await widget.api.uploadBytes(
+            _selectedSharePath!,
+            bytes,
+            relativePath,
+            (sent, total) {
+              if (total > 0) setState(() => _fileProgress = sent / total);
+            },
+          );
+          _completedCount++;
+          total++;
+        } catch (e) {
+          if (e.toString().contains('409')) {
+            _skipCount++;
+            total++;
+          } else {
+            setState(() => _result = '上传失败: $relativePath\n$e');
+            stack.clear();
+            break;
+          }
+        }
+        setState(() {});
+      }
     }
 
     if (!_cancelled) {

@@ -26,7 +26,10 @@ class MainActivity : AudioServiceActivity() {
                         safFolderPicker?.cancelCopy()
                         result.success(null)
                     }
-                    "collectFiles" -> safFolderPicker?.collectFiles(result)
+                    "listDirectory" -> {
+                        val uri = call.arguments as String
+                        safFolderPicker?.listDirectory(uri, result)
+                    }
                     "readSafBytes" -> {
                         val uri = call.arguments as String
                         safFolderPicker?.readSafBytes(uri, result)
