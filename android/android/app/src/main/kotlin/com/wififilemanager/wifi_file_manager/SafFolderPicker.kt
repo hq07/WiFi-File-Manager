@@ -106,6 +106,36 @@ class SafFolderPicker(private val activity: Activity) {
         cancelled = true
     }
 
+    fun collectFiles(result: MethodChannel.Result) {
+        val treeUri = pendingTreeUri
+        val folderName = pendingFolderName
+        if (treeUri == null || folderName == null) {
+            result.error("no_folder", "No folder selected", null)
+            return
+        }
+        Thread {
+            try {
+                val files = mutableListOf<ScannedFile>()
+                scanSubtree(treeUri, treeUri, "", files)
+                activity.runOnUiThread {
+                    if (files.isEmpty()) {
+                        result.success(mapOf<String, Any>("folderName" to folderName))
+                    } else {
+                        result.success(mapOf(
+                            "folderName" to folderName,
+                            "uris" to files.map { it.uri },
+                            "relatives" to files.map { it.relative }
+                        ))
+                    }
+                }
+            } catch (e: Exception) {
+                activity.runOnUiThread {
+                    result.error("collect_error", e.message, null)
+                }
+            }
+        }.start()
+    }
+
     fun readSafBytes(uriString: String, result: MethodChannel.Result) {
         Thread {
             try {

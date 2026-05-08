@@ -23,7 +23,6 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   static const _safChannel = MethodChannel('com.wififilemanager/saf');
-  static const _progressChannel = MethodChannel('com.wififilemanager/media');
 
   List<dynamic> _shares = [];
   String? _selectedSharePath;
@@ -38,8 +37,6 @@ class _UploadScreenState extends State<UploadScreen> {
   bool _cancelled = false;
   String? _currentFileName;
   String? _result;
-  final ValueNotifier<String> _copyProgress = ValueNotifier('');
-  bool _copyCancelled = false;
 
   @override
   void initState() {
@@ -49,7 +46,6 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   void dispose() {
-    _copyProgress.dispose();
     _clearUploadCache();
     super.dispose();
   }
@@ -116,33 +112,15 @@ class _UploadScreenState extends State<UploadScreen> {
     try {
       final pickResult = await _safChannel.invokeMethod('pickFolderSaf');
       if (pickResult == null) return;
-
       final folderName = pickResult['folderName'] as String;
-
-      // 后台枚举文件（只列出 URI，不复制）
-      final scanResult = await _showCopyProgressDialog(folderName);
-      if (scanResult == null || scanResult['cancelled'] == true) return;
-
-      final uris = (scanResult['uris'] as List?)?.cast<String>() ?? [];
-      final relatives = (scanResult['relatives'] as List?)?.cast<String>() ?? [];
-      if (uris.isEmpty) {
-        setState(() => _result = '文件夹为空');
-        return;
-      }
-
-      final items = <_UploadItem>[];
-      for (int i = 0; i < uris.length; i++) {
-        final rel = i < relatives.length ? relatives[i] : 'file_$i';
-        items.add(_UploadItem(localPath: uris[i], relativePath: '$folderName/$rel', safUri: uris[i]));
-      }
-
+      // 只存储文件夹名，不在这里枚举文件（避免卡顿）
+      // 实际枚举延迟到 _upload() 中执行
       setState(() {
-        _files = items;
+        _files = [_UploadItem(localPath: 'saf://tree', relativePath: folderName, safUri: 'saf://tree')];
         _isFolderUpload = true;
         _cacheDirPath = null;
         _result = null;
       });
-
     } on PlatformException catch (e) {
       if (mounted) {
         showCopyableSnackBar(context, '选择文件夹失败: ${e.code}\n${e.message}\n${e.details}', isError: true, duration: const Duration(seconds: 8));
@@ -179,74 +157,6 @@ class _UploadScreenState extends State<UploadScreen> {
       _result = null;
     });
     _autoSelectUploadsDir();
-  }
-
-  Future<Map<String, dynamic>?> _showCopyProgressDialog(String folderName) async {
-    _copyProgress.value = '';
-    _copyCancelled = false;
-    NavigatorState? dialogNav;
-
-    _progressChannel.setMethodCallHandler((call) async {
-      if (call.method == 'onCopyProgress' && mounted) {
-        final progress = (call.arguments['progress'] as num?)?.toDouble() ?? -1;
-        if (progress >= 1.0) {
-          _progressChannel.setMethodCallHandler(null);
-          dialogNav?.pop();
-        } else {
-          _copyProgress.value = call.arguments['current'] as String? ?? '';
-        }
-      }
-    });
-
-    final future = _safChannel.invokeMethod('startCopy');
-
-    if (!mounted) return null;
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        dialogNav = Navigator.of(ctx);
-        return AlertDialog(
-          title: Text('准备「$folderName」'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              ValueListenableBuilder<String>(
-                valueListenable: _copyProgress,
-                builder: (_, current, __) => Text(
-                  current.isNotEmpty ? current : '正在扫描文件…',
-                  style: const TextStyle(fontSize: 13),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                _copyCancelled = true;
-                _safChannel.invokeMethod('cancelCopy');
-                Navigator.pop(ctx);
-              },
-              child: const Text('取消', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
-    );
-
-    _progressChannel.setMethodCallHandler(null);
-
-    try {
-      final result = await future as Map<String, dynamic>?;
-      if (_copyCancelled) return {'cancelled': true};
-      return result;
-    } catch (_) {
-      return _copyCancelled ? {'cancelled': true} : null;
-    }
   }
 
   void _clearUploadCache() {
@@ -309,6 +219,12 @@ class _UploadScreenState extends State<UploadScreen> {
       _result = null;
     });
 
+    // SAF 文件夹：懒枚举 + 直接上传
+    if (_files.length == 1 && _files[0].safUri == 'saf://tree') {
+      await _uploadSafFolder();
+      return;
+    }
+
     final total = _files.length;
     for (int i = 0; i < total; i++) {
       if (_cancelled) break;
@@ -363,6 +279,81 @@ class _UploadScreenState extends State<UploadScreen> {
       _currentFileName = null;
     });
     _clearUploadCache();
+  }
+
+  Future<void> _uploadSafFolder() async {
+    setState(() => _currentFileName = '正在扫描文件…');
+
+    Map<String, dynamic>? scanResult;
+    try {
+      scanResult = await _safChannel.invokeMethod('collectFiles')
+          .timeout(const Duration(seconds: 30), onTimeout: () => null);
+    } catch (_) {}
+
+    if (_cancelled || scanResult == null) {
+      setState(() {
+        _uploading = false;
+        _currentFileName = null;
+        _result = scanResult == null ? '扫描超时' : '已取消';
+      });
+      return;
+    }
+
+    final uris = (scanResult['uris'] as List?)?.cast<String>() ?? [];
+    final relatives = (scanResult['relatives'] as List?)?.cast<String>() ?? [];
+    final folderName = scanResult['folderName'] as String? ?? 'folder';
+
+    if (uris.isEmpty) {
+      setState(() {
+        _uploading = false;
+        _currentFileName = null;
+        _result = '文件夹为空';
+      });
+      return;
+    }
+
+    final total = uris.length;
+    for (int i = 0; i < total; i++) {
+      if (_cancelled) break;
+      final rel = i < relatives.length ? relatives[i] : 'file_$i';
+      String relativePath = '$folderName/$rel';
+      if (_selectedSubdir != null && _selectedSubdir!.isNotEmpty) {
+        relativePath = '$_selectedSubdir/$relativePath';
+      }
+      setState(() {
+        _currentFileName = rel;
+        _fileProgress = 0;
+      });
+      try {
+        final bytes = await _safChannel.invokeMethod('readSafBytes', uris[i]) as Uint8List;
+        await widget.api.uploadBytes(
+          _selectedSharePath!,
+          bytes,
+          relativePath,
+          (sent, total) {
+            if (total > 0) setState(() => _fileProgress = sent / total);
+          },
+        );
+        _completedCount++;
+      } catch (e) {
+        if (e.toString().contains('409')) {
+          _skipCount++;
+        } else {
+          setState(() => _result = '上传失败: $rel\n$e');
+          break;
+        }
+      }
+      setState(() {});
+    }
+
+    if (!_cancelled) {
+      final skipped = _skipCount > 0 ? '，跳过 $_skipCount 个已存在文件' : '';
+      setState(() => _result = '上传完成: $_completedCount/$total$skipped');
+    }
+    setState(() {
+      _uploading = false;
+      _currentFileName = null;
+    });
   }
 
   void _cancelUpload() {
