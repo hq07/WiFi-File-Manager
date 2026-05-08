@@ -18,6 +18,7 @@ class Config:
         self.password_hash: str | None = None
         self.shared_dirs: list[dict] = []
         self.uploads_dir: str = DEFAULT_UPLOADS_DIR
+        self.hide_dot_underscore: bool = True
         self._load()
         self._ensure_uploads_dir()
 
@@ -29,6 +30,7 @@ class Config:
             self.password_hash = data.get("password_hash")
             self.shared_dirs = data.get("shared_dirs", [])
             self.uploads_dir = data.get("uploads_dir", DEFAULT_UPLOADS_DIR)
+            self.hide_dot_underscore = data.get("hide_dot_underscore", True)
             # Backfill visible field for old configs
             for d in self.shared_dirs:
                 d.setdefault("visible", True)
@@ -42,6 +44,7 @@ class Config:
                 "password_hash": self.password_hash,
                 "shared_dirs": self.shared_dirs,
                 "uploads_dir": self.uploads_dir,
+                "hide_dot_underscore": self.hide_dot_underscore,
             }, f, indent=2)
 
     def _ensure_uploads_dir(self):
@@ -118,6 +121,14 @@ class Config:
             if path == shared or path.startswith(shared + os.sep):
                 return True
         return False
+
+    def get_settings(self) -> dict:
+        return {"hide_dot_underscore": self.hide_dot_underscore}
+
+    def update_settings(self, settings: dict):
+        if "hide_dot_underscore" in settings:
+            self.hide_dot_underscore = bool(settings["hide_dot_underscore"])
+        self._save()
 
     def get_shared_dir_by_id(self, share_id: str) -> str | None:
         for d in self.shared_dirs:

@@ -314,7 +314,7 @@ def browse_files(path: str, user=Depends(get_current_user)):
                 entries.append(FileItem(name=os.path.basename(p) or p, type="folder",
                                         size=total, modified="", path=p))
         return FileListResponse(path="/", items=sorted(entries, key=lambda e: e.name.lower()))
-    return FileListResponse(path=path, items=list_files(path))
+    return FileListResponse(path=path, items=list_files(path, config.hide_dot_underscore))
 
 
 @app.get("/api/folder-info")
@@ -324,6 +324,17 @@ def folder_info(path: str, user=Depends(get_current_user)):
     if not os.path.isdir(path):
         raise HTTPException(status_code=404, detail="Directory not found")
     return get_folder_info(path)
+
+
+@app.get("/api/settings")
+def get_settings(user=Depends(get_current_user)):
+    return config.get_settings()
+
+
+@app.put("/api/settings")
+def update_settings(body: dict, user=Depends(get_current_user)):
+    config.update_settings(body)
+    return config.get_settings()
 
 
 @app.get("/api/files/search")
