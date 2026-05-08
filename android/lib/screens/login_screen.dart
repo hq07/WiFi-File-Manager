@@ -33,6 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passCtrl = TextEditingController();
   bool _loading = false;
   bool _scanning = true;
+  bool _rememberPassword = false;
   String? _error;
 
   @override
@@ -46,6 +47,14 @@ class _LoginScreenState extends State<LoginScreen> {
     final port = await widget.api.getSavedPort();
     if (ip != null) _ipCtrl.text = ip;
     if (port != null) _portCtrl.text = port;
+    // 加载记住的密码
+    final savedUser = widget.prefs.getString('saved_username');
+    final savedPass = widget.prefs.getString('saved_password');
+    if (savedUser != null && savedPass != null) {
+      _userCtrl.text = savedUser;
+      _passCtrl.text = savedPass;
+      _rememberPassword = true;
+    }
     _scanForServer();
   }
 
@@ -65,6 +74,14 @@ class _LoginScreenState extends State<LoginScreen> {
       final ok = await widget.api.login(_userCtrl.text, _passCtrl.text)
           .timeout(const Duration(seconds: 3), onTimeout: () => throw TimeoutException('login'));
       if (ok) {
+        // 保存或清除记住的密码
+        if (_rememberPassword) {
+          await widget.prefs.setString('saved_username', _userCtrl.text);
+          await widget.prefs.setString('saved_password', _passCtrl.text);
+        } else {
+          await widget.prefs.remove('saved_username');
+          await widget.prefs.remove('saved_password');
+        }
         // Init services in background, don't block navigation
         widget.historyService.init(widget.prefs, api: widget.api);
         widget.favoritesService.init(widget.prefs, api: widget.api);
@@ -132,7 +149,14 @@ class _LoginScreenState extends State<LoginScreen> {
             TextField(controller: _userCtrl, decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder())),
             const SizedBox(height: 12),
             TextField(controller: _passCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder())),
-            const SizedBox(height: 20),
+            CheckboxListTile(
+              value: _rememberPassword,
+              onChanged: (v) => setState(() => _rememberPassword = v ?? false),
+              title: const Text('记住密码'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 8),
             if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 12),
             SizedBox(
