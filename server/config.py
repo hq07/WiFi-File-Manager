@@ -88,9 +88,23 @@ class Config:
                 return True
         return False
 
+    @staticmethod
+    def normalize_path(path: str) -> str:
+        """Normalize path separators and drive letters for the current OS."""
+        path = path.replace("\\", "/")
+        # On macOS, convert Windows drive letters (e.g. X:/) to /Volumes/X/
+        if sys.platform != "win32" and len(path) >= 2 and path[1] == ":":
+            drive = path[0].upper()
+            remainder = path[2:]  # strip "X:"
+            path = f"/Volumes/{drive}{remainder}"
+        # Collapse consecutive slashes (preserve leading // for UNC if needed)
+        while "//" in path:
+            path = path.replace("//", "/")
+        return path
+
     def is_path_allowed(self, path: str) -> bool:
         """Check if path is within any shared directory or under external drives."""
-        path = os.path.abspath(path)
+        path = os.path.abspath(self.normalize_path(path))
         if path == "/":
             return True
         # Always allow external disks
@@ -100,7 +114,7 @@ class Config:
         elif path.startswith("/Volumes/"):
             return True
         for d in self.shared_dirs:
-            shared = os.path.abspath(d["path"])
+            shared = os.path.abspath(self.normalize_path(d["path"]))
             if path == shared or path.startswith(shared + os.sep):
                 return True
         return False
