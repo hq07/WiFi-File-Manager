@@ -55,6 +55,7 @@ class SafFolderPicker(private val activity: Activity) {
             val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocId)
             pendingFolderName = queryDisplayName(docUri) ?: "folder"
             pendingTreeUri = treeUri
+            android.util.Log.d("SAF", "onActivityResult: treeUri=$treeUri treeDocId=$treeDocId folderName=$pendingFolderName")
             result.success(mapOf("folderName" to pendingFolderName!!))
         } catch (e: Exception) {
             result.error("saf_error", e.message, null)
@@ -112,29 +113,34 @@ class SafFolderPicker(private val activity: Activity) {
                 val treeUri = pendingTreeUri!!
                 val childrenUri = if (uriString == "saf://tree") {
                     val treeDocId = DocumentsContract.getTreeDocumentId(treeUri)
+                    android.util.Log.d("SAF", "root treeUri=$treeUri treeDocId=$treeDocId")
                     DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, treeDocId)
                 } else {
                     val docId = DocumentsContract.getDocumentId(Uri.parse(uriString))
+                    android.util.Log.d("SAF", "sub uri=$uriString docId=$docId")
                     DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
                 }
+                android.util.Log.d("SAF", "childrenUri=$childrenUri")
                 val files = mutableListOf<Map<String, String>>()
                 val dirs = mutableListOf<String>()
 
-                activity.contentResolver.query(
+                val cursor = activity.contentResolver.query(
                     childrenUri,
                     arrayOf(
                         DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                         DocumentsContract.Document.COLUMN_DISPLAY_NAME,
                         DocumentsContract.Document.COLUMN_MIME_TYPE
                     ), null, null, null
-                )?.use { cursor ->
-                    val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                    val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                    val mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                    while (cursor.moveToNext()) {
-                        val childId = cursor.getString(idCol) ?: continue
-                        val name = cursor.getString(nameCol) ?: continue
-                        val mimeType = cursor.getString(mimeCol) ?: ""
+                )
+                android.util.Log.d("SAF", "cursor=$cursor count=${cursor?.count}")
+                cursor?.use { c ->
+                    val idCol = c.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                    val nameCol = c.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    val mimeCol = c.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    while (c.moveToNext()) {
+                        val childId = c.getString(idCol) ?: continue
+                        val name = c.getString(nameCol) ?: continue
+                        val mimeType = c.getString(mimeCol) ?: ""
                         val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
                         if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                             dirs.add(childUri.toString())
@@ -143,10 +149,12 @@ class SafFolderPicker(private val activity: Activity) {
                         }
                     }
                 }
+                android.util.Log.d("SAF", "result: ${files.size} files, ${dirs.size} dirs")
                 activity.runOnUiThread {
                     result.success(mapOf("files" to files, "dirs" to dirs))
                 }
             } catch (e: Exception) {
+                android.util.Log.e("SAF", "listDirectory error", e)
                 activity.runOnUiThread {
                     result.error("list_error", e.message, null)
                 }
@@ -158,12 +166,36 @@ class SafFolderPicker(private val activity: Activity) {
         Thread {
             try {
                 val uri = Uri.parse(uriString)
-                val bytes = activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                activity.runOnUiThread {
-                    if (bytes != null) {
-                        result.success(bytes)
-                    } else {
-                        result.error("read_error", "无法读取文件", null)
+                // 查询文件大小
+                var fileSize = -1L
+                activity.contentResolver.query(uri,
+                    arrayOf(DocumentsContract.Document.COLUMN_SIZE),
+                    null, null, null)?.use { c ->
+                    if (c.moveToFirst()) fileSize = c.getLong(0)
+                }
+
+                if (fileSize in 0..10_000_000) {
+                    // 小文件（≤10MB）：直接读入内存
+                    val bytes = activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    activity.runOnUiThread {
+                        if (bytes != null) result.success(bytes)
+                        else result.error("read_error", "无法读取文件", null)
+                    }
+                } else {
+                    // 大文件：复制到缓存，返回路径
+                    val cacheFile = File(activity.cacheDir, "wfm_saf_upload")
+                    cacheFile.delete()
+                    activity.contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(cacheFile).use { output ->
+                            input.copyTo(output, bufferSize = 65536)
+                        }
+                    }
+                    activity.runOnUiThread {
+                        if (cacheFile.exists() && cacheFile.length() > 0) {
+                            result.success(cacheFile.absolutePath)
+                        } else {
+                            result.error("read_error", "无法读取文件", null)
+                        }
                     }
                 }
             } catch (e: Exception) {
