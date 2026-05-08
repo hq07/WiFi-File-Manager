@@ -19,6 +19,8 @@ class Config:
         self.shared_dirs: list[dict] = []
         self.uploads_dir: str = DEFAULT_UPLOADS_DIR
         self.hide_dot_underscore: bool = True
+        self.sort_field: str = "name"
+        self.sort_ascending: bool = True
         self._load()
         self._ensure_uploads_dir()
 
@@ -31,6 +33,8 @@ class Config:
             self.shared_dirs = data.get("shared_dirs", [])
             self.uploads_dir = data.get("uploads_dir", DEFAULT_UPLOADS_DIR)
             self.hide_dot_underscore = data.get("hide_dot_underscore", True)
+            self.sort_field = data.get("sort_field", "name")
+            self.sort_ascending = data.get("sort_ascending", True)
             # Backfill visible field for old configs
             for d in self.shared_dirs:
                 d.setdefault("visible", True)
@@ -45,6 +49,8 @@ class Config:
                 "shared_dirs": self.shared_dirs,
                 "uploads_dir": self.uploads_dir,
                 "hide_dot_underscore": self.hide_dot_underscore,
+                "sort_field": self.sort_field,
+                "sort_ascending": self.sort_ascending,
             }, f, indent=2)
 
     def _ensure_uploads_dir(self):
@@ -123,11 +129,19 @@ class Config:
         return False
 
     def get_settings(self) -> dict:
-        return {"hide_dot_underscore": self.hide_dot_underscore}
+        return {
+            "hide_dot_underscore": self.hide_dot_underscore,
+            "sort_field": self.sort_field,
+            "sort_ascending": self.sort_ascending,
+        }
 
     def update_settings(self, settings: dict):
         if "hide_dot_underscore" in settings:
             self.hide_dot_underscore = bool(settings["hide_dot_underscore"])
+        if "sort_field" in settings and settings["sort_field"] in ("name", "size", "date"):
+            self.sort_field = settings["sort_field"]
+        if "sort_ascending" in settings:
+            self.sort_ascending = bool(settings["sort_ascending"])
         self._save()
 
     def get_shared_dir_by_id(self, share_id: str) -> str | None:

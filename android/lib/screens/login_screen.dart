@@ -82,6 +82,16 @@ class _LoginScreenState extends State<LoginScreen> {
           await widget.prefs.remove('saved_username');
           await widget.prefs.remove('saved_password');
         }
+        // 同步服务器设置（排序偏好等）
+        try {
+          final settings = await widget.api.getSettings();
+          if (settings['sort_field'] != null) {
+            final field = settings['sort_field'] as String;
+            final ascending = settings['sort_ascending'] as bool? ?? true;
+            widget.layoutPrefs.sortField = SortField.values.asNameMap()[field] ?? SortField.name;
+            widget.layoutPrefs.sortAscending = ascending;
+          }
+        } catch (_) {}
         // Init services in background, don't block navigation
         widget.historyService.init(widget.prefs, api: widget.api);
         widget.favoritesService.init(widget.prefs, api: widget.api);

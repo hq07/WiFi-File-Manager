@@ -138,6 +138,11 @@ class _FileListScreenState extends State<FileListScreen> {
                     widget.layoutPrefs.sortAscending = _sortAscending;
                     _sortItems(_items);
                   });
+                  // 同步排序偏好到服务器
+                  widget.api.updateSettings({
+                    'sort_field': _sortField.name,
+                    'sort_ascending': _sortAscending,
+                  }).catchError((_) {});
                 },
               ),
             const SizedBox(height: 8),
