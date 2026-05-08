@@ -306,7 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   SwitchListTile(
                     title: const Text('隐藏 ._ 文件'),
-                    subtitle: const Text('macOS 生成的元数据文件（如 ._photo.jpg）'),
+                    subtitle: const Text('macOS 元数据文件（._photo.jpg、.DS_Store）'),
                     value: _hideDotUnderscore,
                     onChanged: _toggleHideDotUnderscore,
                   ),
