@@ -87,7 +87,9 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
   @override
   void didUpdateWidget(covariant VideoPlayerView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.filePath != widget.filePath) {
+    // playlist.next/previous/jumpTo triggers MediaPlayerScreen rebuild,
+    // but widget.filePath may stay the same. Detect via playlist currentIndex.
+    if (oldWidget.playlist.currentIndex != widget.playlist.currentIndex) {
       _disposeController();
       _initVideo();
     }
@@ -106,16 +108,18 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       _serverDar = null;
     });
     try {
-      // Fetch display_aspect_ratio from server if not in playlist item
-      final itemDar = widget.playlist.currentItem['display_aspect_ratio'];
+      // Use current playlist item's path (handles next/prev/jumpTo)
+      final item = widget.playlist.currentItem;
+      final path = item['path'] ?? widget.filePath;
+      final itemDar = item['display_aspect_ratio'];
       if (itemDar is num && itemDar > 0) {
         _serverDar = itemDar.toDouble();
       } else {
-        final meta = await widget.api.getFileMetadata(widget.filePath);
+        final meta = await widget.api.getFileMetadata(path);
         final dar = meta?['display_aspect_ratio'];
         if (dar is num && dar > 0) _serverDar = dar.toDouble();
       }
-      final url = widget.api.getPreviewUrl(widget.filePath);
+      final url = widget.api.getPreviewUrl(path);
       _controller = VideoPlayerController.networkUrl(Uri.parse(url));
       await _controller!.initialize();
       _controller!.addListener(_onVideoProgress);
@@ -145,10 +149,11 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     final hs = widget.historyService;
     if (hs == null) return;
     final item = widget.playlist.currentItem;
+    final path = item['path'] ?? widget.filePath;
     hs.addEntry(
       name: item['name'] ?? widget.fileName,
-      path: widget.filePath,
-      dirPath: widget.filePath.substring(0, widget.filePath.lastIndexOf('/')),
+      path: path,
+      dirPath: path.substring(0, path.lastIndexOf('/')),
       size: item['size'] as int? ?? widget.fileSize ?? 0,
     );
     _positionUpdateTimer?.cancel();
@@ -156,7 +161,7 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       final ctrl = _controller;
       if (ctrl == null || !ctrl.value.isInitialized || !ctrl.value.isPlaying) return;
       hs.updatePosition(
-        widget.filePath,
+        path,
         ctrl.value.position.inMilliseconds,
         ctrl.value.duration.inMilliseconds,
       );
@@ -167,8 +172,9 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     final hs = widget.historyService;
     final ctrl = _controller;
     if (hs == null || ctrl == null || !ctrl.value.isInitialized) return;
+    final path = widget.playlist.currentItem['path'] ?? widget.filePath;
     hs.updatePosition(
-      widget.filePath,
+      path,
       ctrl.value.position.inMilliseconds,
       ctrl.value.duration.inMilliseconds,
     );
@@ -179,7 +185,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     if (ctrl == null) return;
     if (ctrl.value.position >= ctrl.value.duration &&
         ctrl.value.duration > Duration.zero) {
-      widget.historyService?.markCompleted(widget.filePath);
+      final currentPath = widget.playlist.currentItem['path'] ?? widget.filePath;
+      widget.historyService?.markCompleted(currentPath);
       final mode = widget.playlist.playMode;
       if (mode == PlayMode.single) {
         // 单曲循环：重新播放当前视频
@@ -517,8 +524,8 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
       duration: ctrl != null && ctrl.value.isInitialized
           ? formatDuration(ctrl.value.duration)
           : null,
-      format: (widget.filePath.split('.').last).toUpperCase(),
-      filePath: widget.filePath,
+      format: ((item['path'] ?? widget.filePath).split('.').last).toUpperCase(),
+      filePath: item['path'] ?? widget.filePath,
     );
   }
 
