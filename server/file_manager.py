@@ -49,9 +49,11 @@ def _get_media_metadata(path: str, ext: str) -> dict:
     return meta
 
 
-def list_files(directory: str) -> list[dict]:
+def list_files(directory: str, hide_dot_underscore: bool = True) -> list[dict]:
     items = []
     for name in sorted(os.listdir(directory)):
+        if hide_dot_underscore and name.startswith('._'):
+            continue
         full_path = os.path.join(directory, name)
         try:
             stat = os.stat(full_path)

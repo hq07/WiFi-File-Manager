@@ -40,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _serverCacheSize = 0;
   int _localCacheSize = 0;
   String _serverVersion = '';
+  bool _hideDotUnderscore = true;
 
   @override
   void initState() {
@@ -47,6 +48,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadShares();
     _loadCacheInfo();
     _loadVersion();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final s = await widget.api.getSettings();
+      if (mounted) setState(() => _hideDotUnderscore = s['hide_dot_underscore'] ?? true);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleHideDotUnderscore(bool value) async {
+    try {
+      await widget.api.updateSettings({'hide_dot_underscore': value});
+      if (mounted) setState(() => _hideDotUnderscore = value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('设置失败: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _loadVersion() async {
@@ -275,6 +297,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: const Text('图片/视频文件'),
                     value: widget.layoutPrefs.showResolution,
                     onChanged: (v) => setState(() => widget.layoutPrefs.showResolution = v),
+                  ),
+                  const Divider(),
+                  // 文件过滤
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text('文件过滤', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                  SwitchListTile(
+                    title: const Text('隐藏 ._ 文件'),
+                    subtitle: const Text('macOS 生成的元数据文件（如 ._photo.jpg）'),
+                    value: _hideDotUnderscore,
+                    onChanged: _toggleHideDotUnderscore,
                   ),
                   const Divider(),
                   // 缓存管理

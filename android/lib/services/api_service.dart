@@ -275,6 +275,17 @@ class ApiService {
     return resp.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> getSettings() async {
+    final resp = await _dio.get('$_baseUrl/api/settings', options: _authOptions);
+    return resp.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateSettings(Map<String, dynamic> settings) async {
+    final resp = await _dio.put('$_baseUrl/api/settings',
+        data: settings, options: _authOptions);
+    return resp.data as Map<String, dynamic>;
+  }
+
   Future<List<dynamic>> getSyncHistory() async {
     final resp =
         await _dio.get('$_baseUrl/api/sync/history', options: _authOptions);
