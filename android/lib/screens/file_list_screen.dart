@@ -212,6 +212,12 @@ class _FileListScreenState extends State<FileListScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (item['type'] == 'folder')
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('详情'),
+                onTap: () { Navigator.pop(context); _showFolderInfo(item); },
+              ),
             if (widget.favoritesService != null)
               ListTile(
                 leading: Icon(isFav ? Icons.star : Icons.star_border, color: isFav ? Colors.amber : null),
@@ -412,30 +418,12 @@ class _FileListScreenState extends State<FileListScreen> {
 
   Widget _buildGridThumbnail(Map<String, dynamic> item) {
     if (item['type'] == 'folder') {
-      return Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.amber.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Center(child: Icon(Icons.folder, color: Colors.amber, size: 48)),
-          ),
-          Positioned(
-            right: 2, top: 2,
-            child: GestureDetector(
-              onTap: () => _showFolderInfo(item),
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.info_outline, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-            ),
-          ),
-        ],
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.amber.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Center(child: Icon(Icons.folder, color: Colors.amber, size: 48)),
       );
     }
     final name = item['name'] as String;
@@ -499,16 +487,11 @@ class _FileListScreenState extends State<FileListScreen> {
       itemBuilder: (_, i) {
         final item = _items[i];
         final metaLine = _buildMetaLine(item);
-        final isFolder = item['type'] == 'folder';
         return ListTile(
           key: ValueKey(item['path'] ?? item['name']),
           leading: _buildThumbnail(item),
           title: Text(item['name']),
           subtitle: metaLine.isNotEmpty ? Text(metaLine, style: const TextStyle(fontSize: 12)) : null,
-          trailing: isFolder ? IconButton(
-            icon: Icon(Icons.info_outline, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
-            onPressed: () => _showFolderInfo(item),
-          ) : null,
           onTap: () => _onItemTap(item),
           onLongPress: () => _onItemLongPress(item),
         );
