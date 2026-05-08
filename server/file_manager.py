@@ -52,7 +52,7 @@ def _get_media_metadata(path: str, ext: str) -> dict:
 def list_files(directory: str, hide_dot_underscore: bool = True) -> list[dict]:
     items = []
     for name in sorted(os.listdir(directory)):
-        if hide_dot_underscore and name.startswith('._'):
+        if hide_dot_underscore and (name.startswith('._') or name == '.DS_Store'):
             continue
         full_path = os.path.join(directory, name)
         try:
