@@ -9,6 +9,7 @@ class MediaInfoPanel extends StatelessWidget {
   final String? format;
   final String? dimensions;
   final String? modifiedDate;
+  final String? filePath;
 
   const MediaInfoPanel({
     super.key,
@@ -19,6 +20,7 @@ class MediaInfoPanel extends StatelessWidget {
     this.format,
     this.dimensions,
     this.modifiedDate,
+    this.filePath,
   });
 
   static void show(BuildContext context, {
@@ -29,6 +31,7 @@ class MediaInfoPanel extends StatelessWidget {
     String? format,
     String? dimensions,
     String? modifiedDate,
+    String? filePath,
   }) {
     showModalBottomSheet(
       context: context,
@@ -40,6 +43,7 @@ class MediaInfoPanel extends StatelessWidget {
         format: format,
         dimensions: dimensions,
         modifiedDate: modifiedDate,
+        filePath: filePath,
       ),
     );
   }
@@ -67,18 +71,28 @@ class MediaInfoPanel extends StatelessWidget {
             if (duration != null) _row('时长', duration!, labelStyle, valueStyle),
             if (format != null) _row('格式', format!, labelStyle, valueStyle),
             if (modifiedDate != null) _row('修改日期', modifiedDate!, labelStyle, valueStyle),
+            if (filePath != null) _row('路径', filePath!, labelStyle, valueStyle, selectable: true),
           ],
         ),
       ),
     );
   }
 
-  Widget _row(String label, String value, TextStyle labelStyle, TextStyle valueStyle) {
+  Widget _row(String label, String value, TextStyle labelStyle, TextStyle valueStyle, {bool selectable = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [Text(label, style: labelStyle), Text(value, style: valueStyle)],
+        children: [
+          Text(label, style: labelStyle),
+          const SizedBox(width: 16),
+          Expanded(
+            child: selectable
+                ? SelectableText(value, style: valueStyle, textAlign: TextAlign.end)
+                : Text(value, style: valueStyle, textAlign: TextAlign.end),
+          ),
+        ],
       ),
     );
   }

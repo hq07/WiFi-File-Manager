@@ -180,10 +180,19 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
     if (ctrl.value.position >= ctrl.value.duration &&
         ctrl.value.duration > Duration.zero) {
       widget.historyService?.markCompleted(widget.filePath);
-      // Auto-advance to next playlist item
-      if (widget.playlist.hasNext) {
+      final mode = widget.playlist.playMode;
+      if (mode == PlayMode.single) {
+        // 单曲循环：重新播放当前视频
+        ctrl.seekTo(Duration.zero);
+        ctrl.play();
+      } else if (mode == PlayMode.shuffle || widget.playlist.hasNext) {
+        // 随机或顺序：切换到下一个并重新初始化
+        _disposeController();
         widget.playlist.next();
+        _initVideo();
+        return;
       } else {
+        // 顺序播放到末尾：停止
         ctrl.seekTo(Duration.zero);
         ctrl.pause();
       }
@@ -495,15 +504,38 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
 
   void _showInfoPanel() {
     final item = widget.playlist.currentItem;
+    final ctrl = _controller;
+    String? resolution;
+    if (ctrl != null && ctrl.value.isInitialized && ctrl.value.size.width > 0) {
+      resolution = '${ctrl.value.size.width.toInt()}×${ctrl.value.size.height.toInt()}';
+    }
     MediaInfoPanel.show(
       context,
       fileName: item['name'] ?? widget.fileName,
       fileSize: item['size'] ?? widget.fileSize,
-      duration: _controller != null && _controller!.value.isInitialized
-          ? formatDuration(_controller!.value.duration)
+      resolution: resolution,
+      duration: ctrl != null && ctrl.value.isInitialized
+          ? formatDuration(ctrl.value.duration)
           : null,
       format: (widget.filePath.split('.').last).toUpperCase(),
+      filePath: widget.filePath,
     );
+  }
+
+  IconData get _playModeIcon {
+    switch (widget.playlist.playMode) {
+      case PlayMode.sequential: return Icons.repeat;
+      case PlayMode.shuffle: return Icons.shuffle;
+      case PlayMode.single: return Icons.repeat_one;
+    }
+  }
+
+  String get _playModeLabel {
+    switch (widget.playlist.playMode) {
+      case PlayMode.sequential: return '顺序播放';
+      case PlayMode.shuffle: return '随机播放';
+      case PlayMode.single: return '单曲循环';
+    }
   }
 
   // ---- Video fit mode ----
@@ -722,6 +754,13 @@ class _VideoPlayerViewState extends State<VideoPlayerView>
                 style: const TextStyle(color: Colors.white, fontSize: 15),
                 overflow: TextOverflow.ellipsis,
               ),
+            ),
+            IconButton(
+              icon: Icon(_playModeIcon, color: Colors.white, size: 22),
+              tooltip: _playModeLabel,
+              onPressed: () {
+                setState(() => widget.playlist.cyclePlayMode());
+              },
             ),
             IconButton(
               icon: const Icon(Icons.info_outline, color: Colors.white),
