@@ -320,15 +320,18 @@ class _UploadScreenState extends State<UploadScreen> {
           _fileProgress = 0;
         });
         try {
-          final bytes = await _safChannel.invokeMethod('readSafBytes', fileUri) as Uint8List;
-          await widget.api.uploadBytes(
-            _selectedSharePath!,
-            bytes,
-            relativePath,
-            (sent, total) {
-              if (total > 0) setState(() => _fileProgress = sent / total);
-            },
-          );
+          final readResult = await _safChannel.invokeMethod('readSafBytes', fileUri);
+          if (readResult is Uint8List) {
+            await widget.api.uploadBytes(
+              _selectedSharePath!, readResult, relativePath,
+              (sent, total) { if (total > 0) setState(() => _fileProgress = sent / total); },
+            );
+          } else {
+            await widget.api.uploadFile(
+              _selectedSharePath!, readResult as String, relativePath,
+              (sent, total) { if (total > 0) setState(() => _fileProgress = sent / total); },
+            );
+          }
           _completedCount++;
           total++;
         } catch (e) {
