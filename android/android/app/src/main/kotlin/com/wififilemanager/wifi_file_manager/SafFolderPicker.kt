@@ -106,31 +106,44 @@ class SafFolderPicker(private val activity: Activity) {
         cancelled = true
     }
 
-    fun collectFiles(result: MethodChannel.Result) {
-        val treeUri = pendingTreeUri
-        val folderName = pendingFolderName
-        if (treeUri == null || folderName == null) {
-            result.error("no_folder", "No folder selected", null)
-            return
-        }
+    fun listDirectory(uriString: String, result: MethodChannel.Result) {
         Thread {
             try {
-                val files = mutableListOf<ScannedFile>()
-                scanSubtree(treeUri, treeUri, "", files)
-                activity.runOnUiThread {
-                    if (files.isEmpty()) {
-                        result.success(mapOf<String, Any>("folderName" to folderName))
-                    } else {
-                        result.success(mapOf(
-                            "folderName" to folderName,
-                            "uris" to files.map { it.uri },
-                            "relatives" to files.map { it.relative }
-                        ))
+                val uri = Uri.parse(uriString)
+                val docId = DocumentsContract.getDocumentId(uri)
+                val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(pendingTreeUri!!, docId)
+                val files = mutableListOf<Map<String, String>>()
+                val dirs = mutableListOf<String>()
+
+                activity.contentResolver.query(
+                    childrenUri,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE
+                    ), null, null, null
+                )?.use { cursor ->
+                    val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                    val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    val mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    while (cursor.moveToNext()) {
+                        val childId = cursor.getString(idCol) ?: continue
+                        val name = cursor.getString(nameCol) ?: continue
+                        val mimeType = cursor.getString(mimeCol) ?: ""
+                        val childUri = DocumentsContract.buildDocumentUriUsingTree(pendingTreeUri!!, childId)
+                        if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                            dirs.add(childUri.toString())
+                        } else {
+                            files.add(mapOf("uri" to childUri.toString(), "name" to name))
+                        }
                     }
+                }
+                activity.runOnUiThread {
+                    result.success(mapOf("files" to files, "dirs" to dirs))
                 }
             } catch (e: Exception) {
                 activity.runOnUiThread {
-                    result.error("collect_error", e.message, null)
+                    result.error("list_error", e.message, null)
                 }
             }
         }.start()
