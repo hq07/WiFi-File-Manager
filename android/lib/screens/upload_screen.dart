@@ -283,7 +283,6 @@ class _UploadScreenState extends State<UploadScreen> {
 
   Future<void> _uploadSafFolder() async {
     final folderName = _files[0].relativePath;
-    // BFS 栈：(uri, relativePath)
     final stack = <(String, String)>[('saf://tree', folderName)];
     int total = 0;
 
@@ -291,8 +290,9 @@ class _UploadScreenState extends State<UploadScreen> {
       final (uri, relPath) = stack.removeLast();
       Map<String, dynamic>? dirResult;
       try {
-        dirResult = await _safChannel.invokeMethod('listDirectory', uri) as Map<String, dynamic>?;
-      } catch (_) {
+        final raw = await _safChannel.invokeMethod('listDirectory', uri);
+        dirResult = raw != null ? Map<String, dynamic>.from(raw) : null;
+      } catch (e) {
         continue;
       }
       if (dirResult == null) continue;
@@ -305,11 +305,12 @@ class _UploadScreenState extends State<UploadScreen> {
       }
 
       // 上传当前目录的文件
-      final files = (dirResult['files'] as List?)?.cast<Map>() ?? [];
+      final files = (dirResult['files'] as List?) ?? [];
       for (final f in files) {
         if (_cancelled) break;
-        final fileUri = f['uri'] as String;
-        final fileName = f['name'] as String;
+        final file = Map<String, dynamic>.from(f);
+        final fileUri = file['uri'] as String;
+        final fileName = file['name'] as String;
         String relativePath = '$relPath/$fileName';
         if (_selectedSubdir != null && _selectedSubdir!.isNotEmpty) {
           relativePath = '$_selectedSubdir/$relativePath';
