@@ -51,6 +51,17 @@ THUMB_CACHE_DIR = os.path.join(os.path.dirname(__file__), "data", "thumb_cache")
 UF_OFFLINE = 0x00001000
 
 
+def _check_ffmpeg() -> bool:
+    try:
+        subprocess.run(['ffmpeg', '-version'], capture_output=True, timeout=5)
+        return True
+    except Exception:
+        return False
+
+
+HAS_FFMPEG = _check_ffmpeg()
+
+
 import threading
 
 # Track in-progress thumbnail generation to avoid duplicate work
@@ -74,11 +85,26 @@ def _generate_thumbnail_bg(path: str, max_size: int = 320) -> None:
     image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.heic'}
     try:
         if ext in video_exts:
-            subprocess.run(
-                ['ffmpeg', '-y', '-i', path, '-ss', '00:00:01',
-                 '-vf', f'scale={max_size}:{max_size}:force_original_aspect_ratio=decrease',
-                 '-vframes', '1', '-q:v', '5', '-f', 'mjpeg', tmp],
-                capture_output=True, timeout=30)
+            if HAS_FFMPEG:
+                subprocess.run(
+                    ['ffmpeg', '-y', '-i', path, '-ss', '00:00:01',
+                     '-vf', f'scale={max_size}:{max_size}:force_original_aspect_ratio=decrease',
+                     '-vframes', '1', '-q:v', '5', '-f', 'mjpeg', tmp],
+                    capture_output=True, timeout=30)
+            else:
+                try:
+                    import cv2
+                    cap = cv2.VideoCapture(path)
+                    cap.set(cv2.CAP_PROP_POS_MSEC, 1000)
+                    ret, frame = cap.read()
+                    cap.release()
+                    if ret and frame is not None:
+                        from PIL import Image
+                        img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                        img.thumbnail((max_size, max_size))
+                        img.save(tmp, 'JPEG', quality=75)
+                except ImportError:
+                    return
         elif ext in image_exts:
             if _sys.platform == 'darwin':
                 subprocess.run(
@@ -91,6 +117,8 @@ def _generate_thumbnail_bg(path: str, max_size: int = 320) -> None:
                     img.thumbnail((max_size, max_size))
                     img.convert('RGB').save(tmp, 'JPEG', quality=75)
                 except ImportError:
+                    if not HAS_FFMPEG:
+                        return
                     subprocess.run(
                         ['ffmpeg', '-y', '-i', path,
                          '-vf', f'scale={max_size}:{max_size}:force_original_aspect_ratio=decrease',
@@ -819,5 +847,17 @@ if __name__ == "__main__":
     print(f"  Access from phone: http://{local_ip}:{port}")
     if not config.password_hash:
         print(f"  First login will set your password")
+    thumb_deps = []
+    if HAS_FFMPEG:
+        thumb_deps.append("ffmpeg")
+    try:
+        import cv2; thumb_deps.append("opencv")
+    except ImportError:
+        pass
+    try:
+        from PIL import Image; thumb_deps.append("pillow")
+    except ImportError:
+        pass
+    print(f"  缩略图: {', '.join(thumb_deps) if thumb_deps else '无可用依赖'}")
     print(f"{'='*50}\n")
     uvicorn.run(app, host="0.0.0.0", port=port)

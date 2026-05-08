@@ -12,6 +12,8 @@ dependencies = [
     "python-multipart>=0.0.27",
     "uvicorn>=0.46.0",
     "send2trash>=1.8.3",
+    "Pillow>=10.0.0",
+    "opencv-python-headless>=4.8.0",
 ]
 
 [dependency-groups]
