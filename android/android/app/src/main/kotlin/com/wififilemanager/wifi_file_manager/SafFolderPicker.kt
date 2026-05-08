@@ -7,6 +7,7 @@ import android.provider.DocumentsContract
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 class SafFolderPicker(private val activity: Activity) {
 
@@ -15,6 +16,10 @@ class SafFolderPicker(private val activity: Activity) {
     }
 
     private var pendingResult: MethodChannel.Result? = null
+    private var pendingTreeUri: Uri? = null
+    private var pendingFolderName: String? = null
+    private var copying = AtomicBoolean(false)
+    @Volatile private var cancelled = false
 
     fun pickFolderSaf(result: MethodChannel.Result) {
         if (pendingResult != null) {
@@ -47,85 +52,78 @@ class SafFolderPicker(private val activity: Activity) {
         try {
             val treeDocId = DocumentsContract.getTreeDocumentId(treeUri)
             val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocId)
-            val folderName = queryDisplayName(docUri) ?: "folder"
-            val cacheDir = File(activity.cacheDir, "wfm_upload_cache")
-            if (cacheDir.exists()) cacheDir.deleteRecursively()
-            cacheDir.mkdirs()
-
-            val cachedPaths = mutableListOf<String>()
-            enumerateAndCopy(treeUri, cacheDir, "", cachedPaths)
-
-            if (cachedPaths.isEmpty()) {
-                result.success(emptyMap<String, Any>())
-                return true
-            }
-
-            result.success(mapOf(
-                "folderName" to folderName,
-                "dirPath" to cacheDir.absolutePath,
-                "paths" to cachedPaths
-            ))
+            pendingFolderName = queryDisplayName(docUri) ?: "folder"
+            pendingTreeUri = treeUri
+            result.success(mapOf("folderName" to pendingFolderName!!))
         } catch (e: Exception) {
             result.error("saf_error", e.message, null)
         }
         return true
     }
 
-    private fun enumerateAndCopy(
-        treeUri: Uri,
-        destDir: File,
-        relativePrefix: String,
-        paths: MutableList<String>
-    ) {
-        val treeDocId = DocumentsContract.getTreeDocumentId(treeUri)
-        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, treeDocId)
+    fun startCopy(result: MethodChannel.Result) {
+        val treeUri = pendingTreeUri
+        val folderName = pendingFolderName
+        if (treeUri == null || folderName == null) {
+            result.error("no_folder", "No folder selected", null)
+            return
+        }
+        if (!copying.compareAndSet(false, true)) {
+            result.error("already_copying", "Copy already in progress", null)
+            return
+        }
 
-        activity.contentResolver.query(
-            childrenUri,
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE
-            ),
-            null, null, null
-        )?.use { cursor ->
-            val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+        cancelled = false
+        Thread {
+            try {
+                val cacheDir = File(activity.cacheDir, "wfm_upload_cache")
+                if (cacheDir.exists()) cacheDir.deleteRecursively()
+                cacheDir.mkdirs()
 
-            while (cursor.moveToNext()) {
-                val docId = cursor.getString(idCol) ?: continue
-                val name = cursor.getString(nameCol) ?: continue
-                val mimeType = cursor.getString(mimeCol) ?: ""
-                val childRelative = if (relativePrefix.isEmpty()) name
-                    else "$relativePrefix${File.separator}$name"
-                val childDocUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                val paths = mutableListOf<String>()
+                copySubtree(treeUri, treeUri, cacheDir, "", paths)
 
-                if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    enumerateAndCopySubtree(childDocUri, treeUri, destDir, childRelative, paths)
-                } else {
-                    val cachedFile = File(destDir, childRelative)
-                    cachedFile.parentFile?.mkdirs()
-                    try {
-                        activity.contentResolver.openInputStream(childDocUri)?.use { input ->
-                            FileOutputStream(cachedFile).use { output ->
-                                input.copyTo(output, bufferSize = 8192)
-                            }
-                        }
-                        paths.add(cachedFile.absolutePath)
-                    } catch (_: Exception) {}
+                activity.runOnUiThread {
+                    copying.set(false)
+                    sendProgress("", 1.0)
+                    if (cancelled) {
+                        result.success(mapOf("cancelled" to true))
+                    } else {
+                        result.success(mapOf(
+                            "folderName" to folderName,
+                            "dirPath" to cacheDir.absolutePath,
+                            "paths" to paths
+                        ))
+                    }
+                }
+            } catch (e: Exception) {
+                activity.runOnUiThread {
+                    copying.set(false)
+                    result.error("copy_error", e.message, null)
                 }
             }
-        }
+        }.start()
     }
 
-    private fun enumerateAndCopySubtree(
+    fun cancelCopy() {
+        cancelled = true
+    }
+
+    private fun sendProgress(current: String, progress: Double) {
+        MainActivity.channel?.invokeMethod("onCopyProgress", mapOf(
+            "current" to current,
+            "progress" to progress
+        ))
+    }
+
+    private fun copySubtree(
         docUri: Uri,
         treeUri: Uri,
         destDir: File,
         relativePrefix: String,
         paths: MutableList<String>
     ) {
+        if (cancelled) return
         val docId = DocumentsContract.getDocumentId(docUri)
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
 
@@ -134,7 +132,8 @@ class SafFolderPicker(private val activity: Activity) {
             arrayOf(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE
             ),
             null, null, null
         )?.use { cursor ->
@@ -142,16 +141,18 @@ class SafFolderPicker(private val activity: Activity) {
             val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
             val mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
 
-            while (cursor.moveToNext()) {
-                val docId2 = cursor.getString(idCol) ?: continue
+            while (cursor.moveToNext() && !cancelled) {
+                val childId = cursor.getString(idCol) ?: continue
                 val name = cursor.getString(nameCol) ?: continue
                 val mimeType = cursor.getString(mimeCol) ?: ""
-                val childRelative = "$relativePrefix${File.separator}$name"
-                val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId2)
+                val childRelative = if (relativePrefix.isEmpty()) name
+                    else "$relativePrefix${File.separator}$name"
+                val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
 
                 if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    enumerateAndCopySubtree(childUri, treeUri, destDir, childRelative, paths)
+                    copySubtree(childUri, treeUri, destDir, childRelative, paths)
                 } else {
+                    sendProgress(childRelative, -1.0)
                     val cachedFile = File(destDir, childRelative)
                     cachedFile.parentFile?.mkdirs()
                     try {

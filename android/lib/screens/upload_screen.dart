@@ -21,6 +21,9 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
+  static const _safChannel = MethodChannel('com.wififilemanager/saf');
+  static const _progressChannel = MethodChannel('com.wififilemanager/media');
+
   List<dynamic> _shares = [];
   String? _selectedSharePath;
   List<String> _subdirs = [];
@@ -34,6 +37,8 @@ class _UploadScreenState extends State<UploadScreen> {
   bool _cancelled = false;
   String? _currentFileName;
   String? _result;
+  final ValueNotifier<String> _copyProgress = ValueNotifier('');
+  bool _copyCancelled = false;
 
   @override
   void initState() {
@@ -43,6 +48,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   void dispose() {
+    _copyProgress.dispose();
     _clearUploadCache();
     super.dispose();
   }
@@ -106,19 +112,28 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _pickFolderAndroid() async {
-    const channel = MethodChannel('com.wififilemanager/saf');
     try {
-      final result = await channel.invokeMethod('pickFolderSaf');
-      if (result == null) return;
+      final pickResult = await _safChannel.invokeMethod('pickFolderSaf');
+      if (pickResult == null) return;
 
-      final paths = (result['paths'] as List?)?.cast<String>() ?? [];
+      final folderName = pickResult['folderName'] as String;
+
+      // 后台线程复制文件，带进度提示
+      final copyResult = await _showCopyProgressDialog(folderName);
+      if (copyResult == null) return;
+
+      if (copyResult['cancelled'] == true) {
+        setState(() => _result = '已取消');
+        return;
+      }
+
+      final paths = (copyResult['paths'] as List?)?.cast<String>() ?? [];
       if (paths.isEmpty) {
         setState(() => _result = '文件夹为空');
         return;
       }
 
-      final dirPath = result['dirPath'] as String;
-      final folderName = result['folderName'] as String;
+      final dirPath = copyResult['dirPath'] as String;
       final items = paths.map((p) {
         final relative = p.substring(dirPath.length + 1);
         return _UploadItem(localPath: p, relativePath: '$folderName/$relative');
@@ -167,6 +182,74 @@ class _UploadScreenState extends State<UploadScreen> {
       _result = null;
     });
     _autoSelectUploadsDir();
+  }
+
+  Future<Map<String, dynamic>?> _showCopyProgressDialog(String folderName) async {
+    _copyProgress.value = '';
+    _copyCancelled = false;
+    NavigatorState? dialogNav;
+
+    _progressChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onCopyProgress' && mounted) {
+        final progress = (call.arguments['progress'] as num?)?.toDouble() ?? -1;
+        if (progress >= 1.0) {
+          _progressChannel.setMethodCallHandler(null);
+          dialogNav?.pop();
+        } else {
+          _copyProgress.value = call.arguments['current'] as String? ?? '';
+        }
+      }
+    });
+
+    final future = _safChannel.invokeMethod('startCopy');
+
+    if (!mounted) return null;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        dialogNav = Navigator.of(ctx);
+        return AlertDialog(
+          title: Text('准备「$folderName」'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<String>(
+                valueListenable: _copyProgress,
+                builder: (_, current, __) => Text(
+                  current.isNotEmpty ? current : '正在扫描文件…',
+                  style: const TextStyle(fontSize: 13),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _copyCancelled = true;
+                _safChannel.invokeMethod('cancelCopy');
+                Navigator.pop(ctx);
+              },
+              child: const Text('取消', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+
+    _progressChannel.setMethodCallHandler(null);
+
+    try {
+      final result = await future as Map<String, dynamic>?;
+      if (_copyCancelled) return {'cancelled': true};
+      return result;
+    } catch (_) {
+      return _copyCancelled ? {'cancelled': true} : null;
+    }
   }
 
   void _clearUploadCache() {

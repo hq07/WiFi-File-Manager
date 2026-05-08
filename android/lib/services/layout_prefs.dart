@@ -2,6 +2,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum LayoutMode { list, grid }
+enum SortField { name, size, date }
 
 class LayoutPrefs {
   static const _keyLayoutMode = 'layout_mode';
@@ -12,6 +13,8 @@ class LayoutPrefs {
   static const _keyShowExtension = 'show_extension';
   static const _keyShowDuration = 'show_duration';
   static const _keyShowResolution = 'show_resolution';
+  static const _keySortField = 'sort_field';
+  static const _keySortAscending = 'sort_ascending';
 
   late final SharedPreferences _prefs;
 
@@ -45,4 +48,13 @@ class LayoutPrefs {
 
   bool get showResolution => _prefs.getBool(_keyShowResolution) ?? true;
   set showResolution(bool v) => _prefs.setBool(_keyShowResolution, v);
+
+  SortField get sortField {
+    final v = _prefs.getString(_keySortField);
+    return SortField.values.asNameMap()[v] ?? SortField.name;
+  }
+  set sortField(SortField v) => _prefs.setString(_keySortField, v.name);
+
+  bool get sortAscending => _prefs.getBool(_keySortAscending) ?? true;
+  set sortAscending(bool v) => _prefs.setBool(_keySortAscending, v);
 }

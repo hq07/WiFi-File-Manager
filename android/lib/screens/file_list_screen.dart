@@ -38,6 +38,8 @@ class _FileListScreenState extends State<FileListScreen> {
   bool _loading = true;
   late String _currentPath;
   late LayoutMode _layoutMode;
+  late SortField _sortField;
+  late bool _sortAscending;
 
   String _joinPath(String base, String name) {
     if (base.endsWith('/')) return '$base$name';
@@ -49,6 +51,8 @@ class _FileListScreenState extends State<FileListScreen> {
     super.initState();
     _currentPath = widget.path.replaceAll(RegExp(r'/+'), '/');
     _layoutMode = widget.layoutPrefs.layoutMode;
+    _sortField = widget.layoutPrefs.sortField;
+    _sortAscending = widget.layoutPrefs.sortAscending;
     _loadFiles();
   }
 
@@ -56,13 +60,91 @@ class _FileListScreenState extends State<FileListScreen> {
     setState(() { _loading = true; });
     try {
       final data = await widget.api.listFiles(_currentPath);
-      setState(() { _items = data['items']; _loading = false; });
+      final items = List<dynamic>.from(data['items']);
+      _sortItems(items);
+      setState(() { _items = items; _loading = false; });
     } catch (e) {
       setState(() { _loading = false; });
       if (mounted) {
         showCopyableSnackBar(context, 'Error: $e', isError: true);
       }
     }
+  }
+
+  void _sortItems(List<dynamic> items) {
+    items.sort((a, b) {
+      final aIsFolder = a['type'] == 'folder';
+      final bIsFolder = b['type'] == 'folder';
+      if (aIsFolder != bIsFolder) return aIsFolder ? -1 : 1;
+
+      int cmp;
+      switch (_sortField) {
+        case SortField.size:
+          cmp = (a['size'] as int).compareTo(b['size'] as int);
+          break;
+        case SortField.date:
+          cmp = (a['modified'] as String).compareTo(b['modified'] as String);
+          break;
+        case SortField.name:
+          cmp = (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase());
+          break;
+      }
+      return _sortAscending ? cmp : -cmp;
+    });
+  }
+
+  void _showSortSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('排序方式', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+            for (final field in SortField.values)
+              ListTile(
+                leading: Icon(
+                  field == SortField.name ? Icons.sort_by_alpha
+                      : field == SortField.size ? Icons.data_usage
+                      : Icons.calendar_today,
+                  color: _sortField == field ? Theme.of(context).colorScheme.primary : null,
+                ),
+                title: Text(
+                  field == SortField.name ? '名称'
+                      : field == SortField.size ? '大小'
+                      : '修改日期',
+                  style: TextStyle(
+                    fontWeight: _sortField == field ? FontWeight.bold : FontWeight.normal,
+                    color: _sortField == field ? Theme.of(context).colorScheme.primary : null,
+                  ),
+                ),
+                trailing: _sortField == field
+                    ? Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                        color: Theme.of(context).colorScheme.primary)
+                    : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    if (_sortField == field) {
+                      _sortAscending = !_sortAscending;
+                    } else {
+                      _sortField = field;
+                      _sortAscending = true;
+                    }
+                    widget.layoutPrefs.sortField = _sortField;
+                    widget.layoutPrefs.sortAscending = _sortAscending;
+                    _sortItems(_items);
+                  });
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   void _toggleLayout() {
@@ -352,6 +434,7 @@ class _FileListScreenState extends State<FileListScreen> {
         final item = _items[i];
         final metaLine = _buildMetaLine(item);
         return ListTile(
+          key: ValueKey(item['path'] ?? item['name']),
           leading: _buildThumbnail(item),
           title: Text(item['name']),
           subtitle: metaLine.isNotEmpty ? Text(metaLine, style: const TextStyle(fontSize: 12)) : null,
@@ -376,6 +459,7 @@ class _FileListScreenState extends State<FileListScreen> {
         final item = _items[i];
         final metaLine = _buildMetaLine(item);
         return GestureDetector(
+          key: ValueKey(item['path'] ?? item['name']),
           onTap: () => _onItemTap(item),
           onLongPress: () => _onItemLongPress(item),
           child: Column(
@@ -410,6 +494,11 @@ class _FileListScreenState extends State<FileListScreen> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.sort),
+            onPressed: _showSortSheet,
+            tooltip: '排序',
+          ),
           IconButton(
             icon: Icon(_layoutMode == LayoutMode.list ? Icons.grid_view : Icons.view_list),
             onPressed: _toggleLayout,
