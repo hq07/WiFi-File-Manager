@@ -177,6 +177,23 @@ class ApiService {
     return resp.data;
   }
 
+  Future<Map<String, dynamic>> uploadBytes(
+      String targetPath, Uint8List bytes, String relativePath,
+      void Function(int, int)? onProgress) async {
+    final parts = relativePath.split('/');
+    final filename = parts.last;
+    final subdir = parts.length > 1 ? parts.sublist(0, parts.length - 1).join('/') : '';
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    final resp = await _dio.post('$_baseUrl/api/files/upload',
+        data: formData,
+        queryParameters: {'path': targetPath, 'subdir': subdir},
+        options: _authOptions,
+        onSendProgress: onProgress);
+    return resp.data;
+  }
+
   String getPreviewUrl(String path, {bool thumbnail = false}) {
     final thumbParam = thumbnail ? '&thumbnail=true' : '';
     return '$_baseUrl/api/files/preview?path=${Uri.encodeComponent(path)}&token=$_token$thumbParam';
@@ -250,6 +267,12 @@ class ApiService {
     final resp = await _dio.get('$_baseUrl/api/files/search',
         queryParameters: {'q': query}, options: _authOptions);
     return resp.data;
+  }
+
+  Future<Map<String, dynamic>> getFolderInfo(String path) async {
+    final resp = await _dio.get('$_baseUrl/api/folder-info',
+        queryParameters: {'path': path}, options: _authOptions);
+    return resp.data as Map<String, dynamic>;
   }
 
   Future<List<dynamic>> getSyncHistory() async {

@@ -72,6 +72,44 @@ def list_files(directory: str) -> list[dict]:
     return items
 
 
+def get_folder_info(directory: str, max_depth: int = 3, max_items: int = 5000) -> dict:
+    """统计文件夹内各类型文件数量（递归），返回分类计数。"""
+    counts = {"image": 0, "video": 0, "audio": 0, "other": 0, "folder": 0}
+    total = 0
+
+    for dirpath, dirnames, filenames in os.walk(directory):
+        # 计算当前深度
+        depth = dirpath[len(directory):].count(os.sep)
+        if depth >= max_depth:
+            dirnames.clear()
+            continue
+
+        # 跳过隐藏文件夹
+        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+
+        for name in filenames:
+            if name.startswith('.'):
+                continue
+            total += 1
+            if total > max_items:
+                counts["truncated"] = True
+                return counts
+
+            ext = os.path.splitext(name)[1].lower()
+            if ext in IMAGE_EXTS:
+                counts["image"] += 1
+            elif ext in VIDEO_EXTS:
+                counts["video"] += 1
+            elif ext in AUDIO_EXTS:
+                counts["audio"] += 1
+            else:
+                counts["other"] += 1
+
+        counts["folder"] += len(dirnames)
+
+    return counts
+
+
 def get_file_metadata(directory: str, filename: str) -> dict | None:
     """Get media metadata for a single file. Returns None if not applicable."""
     full_path = os.path.join(directory, filename)

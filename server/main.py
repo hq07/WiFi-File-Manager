@@ -19,11 +19,29 @@ from server.models import (
     FileItem, FileListResponse, UploadResponse, DiskInfo,
     SyncHistoryRequest, SyncFavoritesRequest,
 )
-from server.file_manager import list_files, get_file_metadata, validate_path, detect_disks, get_content_type
+from server.file_manager import list_files, get_file_metadata, validate_path, detect_disks, get_content_type, get_folder_info
 
 config = Config()
 app = FastAPI(title="WiFi File Manager", version="2.0")
 security = HTTPBearer()
+
+
+@app.middleware("http")
+async def normalize_path_param(request: Request, call_next):
+    """Normalize Windows-style path query params for macOS/Linux servers."""
+    qs = request.scope.get("query_string", b"")
+    if qs and b"path=" in qs:
+        from urllib.parse import parse_qs, urlencode
+        params = parse_qs(qs.decode("utf-8"), keep_blank_values=True)
+        if "path" in params:
+            original = params["path"][0]
+            normalized = Config.normalize_path(original)
+            if normalized != original:
+                params["path"] = [normalized]
+                request.scope["query_string"] = urlencode(
+                    [(k, v) for k, vs in params.items() for v in vs]
+                ).encode("utf-8")
+    return await call_next(request)
 
 CHUNK_SIZE = 64 * 1024  # 64 KB
 SERVER_VERSION = "2.0"
@@ -297,6 +315,15 @@ def browse_files(path: str, user=Depends(get_current_user)):
                                         size=total, modified="", path=p))
         return FileListResponse(path="/", items=sorted(entries, key=lambda e: e.name.lower()))
     return FileListResponse(path=path, items=list_files(path))
+
+
+@app.get("/api/folder-info")
+def folder_info(path: str, user=Depends(get_current_user)):
+    if not config.is_path_allowed(path):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not os.path.isdir(path):
+        raise HTTPException(status_code=404, detail="Directory not found")
+    return get_folder_info(path)
 
 
 @app.get("/api/files/search")
