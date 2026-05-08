@@ -20,6 +20,7 @@ class SafFolderPicker(private val activity: Activity) {
     private var pendingFolderName: String? = null
     private var copying = AtomicBoolean(false)
     @Volatile private var cancelled = false
+    private data class ScannedFile(val uri: String, val relative: String)
 
     fun pickFolderSaf(result: MethodChannel.Result) {
         if (pendingResult != null) {
@@ -69,19 +70,15 @@ class SafFolderPicker(private val activity: Activity) {
             return
         }
         if (!copying.compareAndSet(false, true)) {
-            result.error("already_copying", "Copy already in progress", null)
+            result.error("already_copying", "Scan already in progress", null)
             return
         }
 
         cancelled = false
         Thread {
             try {
-                val cacheDir = File(activity.cacheDir, "wfm_upload_cache")
-                if (cacheDir.exists()) cacheDir.deleteRecursively()
-                cacheDir.mkdirs()
-
-                val paths = mutableListOf<String>()
-                copySubtree(treeUri, treeUri, cacheDir, "", paths)
+                val files = mutableListOf<ScannedFile>()
+                scanSubtree(treeUri, treeUri, "", files)
 
                 activity.runOnUiThread {
                     copying.set(false)
@@ -91,15 +88,15 @@ class SafFolderPicker(private val activity: Activity) {
                     } else {
                         result.success(mapOf(
                             "folderName" to folderName,
-                            "dirPath" to cacheDir.absolutePath,
-                            "paths" to paths
+                            "uris" to files.map { it.uri },
+                            "relatives" to files.map { it.relative }
                         ))
                     }
                 }
             } catch (e: Exception) {
                 activity.runOnUiThread {
                     copying.set(false)
-                    result.error("copy_error", e.message, null)
+                    result.error("scan_error", e.message, null)
                 }
             }
         }.start()
@@ -109,6 +106,26 @@ class SafFolderPicker(private val activity: Activity) {
         cancelled = true
     }
 
+    fun readSafBytes(uriString: String, result: MethodChannel.Result) {
+        Thread {
+            try {
+                val uri = Uri.parse(uriString)
+                val bytes = activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                activity.runOnUiThread {
+                    if (bytes != null) {
+                        result.success(bytes)
+                    } else {
+                        result.error("read_error", "无法读取文件", null)
+                    }
+                }
+            } catch (e: Exception) {
+                activity.runOnUiThread {
+                    result.error("read_error", e.message, null)
+                }
+            }
+        }.start()
+    }
+
     private fun sendProgress(current: String, progress: Double) {
         MainActivity.channel?.invokeMethod("onCopyProgress", mapOf(
             "current" to current,
@@ -116,12 +133,11 @@ class SafFolderPicker(private val activity: Activity) {
         ))
     }
 
-    private fun copySubtree(
+    private fun scanSubtree(
         docUri: Uri,
         treeUri: Uri,
-        destDir: File,
         relativePrefix: String,
-        paths: MutableList<String>
+        files: MutableList<ScannedFile>
     ) {
         if (cancelled) return
         val docId = DocumentsContract.getDocumentId(docUri)
@@ -132,8 +148,7 @@ class SafFolderPicker(private val activity: Activity) {
             arrayOf(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_SIZE
+                DocumentsContract.Document.COLUMN_MIME_TYPE
             ),
             null, null, null
         )?.use { cursor ->
@@ -146,23 +161,14 @@ class SafFolderPicker(private val activity: Activity) {
                 val name = cursor.getString(nameCol) ?: continue
                 val mimeType = cursor.getString(mimeCol) ?: ""
                 val childRelative = if (relativePrefix.isEmpty()) name
-                    else "$relativePrefix${File.separator}$name"
+                    else "$relativePrefix/$name"
                 val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
 
                 if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    copySubtree(childUri, treeUri, destDir, childRelative, paths)
+                    scanSubtree(childUri, treeUri, childRelative, files)
                 } else {
                     sendProgress(childRelative, -1.0)
-                    val cachedFile = File(destDir, childRelative)
-                    cachedFile.parentFile?.mkdirs()
-                    try {
-                        activity.contentResolver.openInputStream(childUri)?.use { input ->
-                            FileOutputStream(cachedFile).use { output ->
-                                input.copyTo(output, bufferSize = 8192)
-                            }
-                        }
-                        paths.add(cachedFile.absolutePath)
-                    } catch (_: Exception) {}
+                    files.add(ScannedFile(childUri.toString(), childRelative))
                 }
             }
         }

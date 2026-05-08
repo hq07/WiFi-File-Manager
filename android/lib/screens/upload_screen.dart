@@ -9,7 +9,8 @@ import '../utils/snackbar_utils.dart';
 class _UploadItem {
   final String localPath;
   final String relativePath;
-  _UploadItem({required this.localPath, required this.relativePath});
+  final String? safUri;
+  _UploadItem({required this.localPath, required this.relativePath, this.safUri});
 }
 
 class UploadScreen extends StatefulWidget {
@@ -118,31 +119,27 @@ class _UploadScreenState extends State<UploadScreen> {
 
       final folderName = pickResult['folderName'] as String;
 
-      // 后台线程复制文件，带进度提示
-      final copyResult = await _showCopyProgressDialog(folderName);
-      if (copyResult == null) return;
+      // 后台枚举文件（只列出 URI，不复制）
+      final scanResult = await _showCopyProgressDialog(folderName);
+      if (scanResult == null || scanResult['cancelled'] == true) return;
 
-      if (copyResult['cancelled'] == true) {
-        setState(() => _result = '已取消');
-        return;
-      }
-
-      final paths = (copyResult['paths'] as List?)?.cast<String>() ?? [];
-      if (paths.isEmpty) {
+      final uris = (scanResult['uris'] as List?)?.cast<String>() ?? [];
+      final relatives = (scanResult['relatives'] as List?)?.cast<String>() ?? [];
+      if (uris.isEmpty) {
         setState(() => _result = '文件夹为空');
         return;
       }
 
-      final dirPath = copyResult['dirPath'] as String;
-      final items = paths.map((p) {
-        final relative = p.substring(dirPath.length + 1);
-        return _UploadItem(localPath: p, relativePath: '$folderName/$relative');
-      }).toList();
+      final items = <_UploadItem>[];
+      for (int i = 0; i < uris.length; i++) {
+        final rel = i < relatives.length ? relatives[i] : 'file_$i';
+        items.add(_UploadItem(localPath: uris[i], relativePath: '$folderName/$rel', safUri: uris[i]));
+      }
 
       setState(() {
         _files = items;
         _isFolderUpload = true;
-        _cacheDirPath = dirPath;
+        _cacheDirPath = null;
         _result = null;
       });
 
@@ -325,14 +322,26 @@ class _UploadScreenState extends State<UploadScreen> {
         _fileProgress = 0;
       });
       try {
-        await widget.api.uploadFile(
-          _selectedSharePath!,
-          file.localPath,
-          relativePath,
-          (sent, total) {
-            if (total > 0) setState(() => _fileProgress = sent / total);
-          },
-        );
+        if (file.safUri != null) {
+          final bytes = await _safChannel.invokeMethod('readSafBytes', file.safUri) as Uint8List;
+          await widget.api.uploadBytes(
+            _selectedSharePath!,
+            bytes,
+            relativePath,
+            (sent, total) {
+              if (total > 0) setState(() => _fileProgress = sent / total);
+            },
+          );
+        } else {
+          await widget.api.uploadFile(
+            _selectedSharePath!,
+            file.localPath,
+            relativePath,
+            (sent, total) {
+              if (total > 0) setState(() => _fileProgress = sent / total);
+            },
+          );
+        }
         _completedCount++;
       } catch (e) {
         if (e.toString().contains('409')) {
