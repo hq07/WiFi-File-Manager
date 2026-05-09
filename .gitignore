@@ -10,3 +10,7 @@ server/data.win/
 .claude/
 *.log
 web/
+
+# 本地配置（含密码和个人路径）
+config.json
+config.win.json
