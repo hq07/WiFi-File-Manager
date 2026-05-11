@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:volume_controller/volume_controller.dart';
@@ -1164,6 +1165,7 @@ class _ProgressBarState extends State<_ProgressBar> {
 
   void _onDragStart(DragStartDetails details) {
     setState(() => _dragging = true);
+    HapticFeedback.mediumImpact();
   }
 
   void _onDragUpdate(DragUpdateDetails details, BoxConstraints constraints) {
@@ -1175,6 +1177,7 @@ class _ProgressBarState extends State<_ProgressBar> {
     final position = _value.duration * _dragValue;
     widget.controller.seekTo(position);
     setState(() => _dragging = false);
+    HapticFeedback.lightImpact();
   }
 
   void _onTapDown(TapDownDetails details, BoxConstraints constraints) {
